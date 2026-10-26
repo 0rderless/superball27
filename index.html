@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#050b1f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Superball 27">
+  <meta name="description" content="Superball 27 – 3D mobile football. ZorpFC vs Varcelona.">
+  <title>Superball 27</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="fade"></div>
+
+  <!-- MAIN MENU -->
+  <div id="menu" class="screen">
+    <div class="menu-card">
+      <div class="logo">
+        <span class="l1">SUPERBALL</span><span class="l2">27</span>
+      </div>
+      <div class="fixture">
+        <div class="side">
+          <div class="crest crest-home"><span>Z</span></div>
+          <div class="tname">ZorpFC</div>
+        </div>
+        <div class="vs">VS</div>
+        <div class="side">
+          <div class="crest crest-away"><span>V</span></div>
+          <div class="tname">Varcelona</div>
+        </div>
+      </div>
+      <button id="play-btn" class="play"><span>PLAY</span><small>VS BOTS</small></button>
+      <div class="opts">
+        <div class="opt" data-opt="difficulty">
+          <label>Difficulty</label>
+          <div class="chips"><button data-v="amateur">Amateur</button><button data-v="pro">Pro</button><button data-v="legend">Legend</button></div>
+        </div>
+        <div class="opt" data-opt="minutes">
+          <label>Match</label>
+          <div class="chips"><button data-v="4">4 min</button><button data-v="6">6 min</button><button data-v="10">10 min</button></div>
+        </div>
+        <div class="opt" data-opt="camera">
+          <label>Camera</label>
+          <div class="chips"><button data-v="close">Close</button><button data-v="broadcast">Broadcast</button><button data-v="wide">Wide</button></div>
+        </div>
+        <div class="opt" data-opt="graphics">
+          <label>Graphics</label>
+          <div class="chips"><button data-v="low">Smooth</button><button data-v="high">HD</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="install-tip" id="install-tip">Tip: Share → <b>Add to Home Screen</b> to play full-screen like an app</div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="scorebar">
+      <div class="sb-team sb-home"><i></i>ZFC</div>
+      <div class="sb-score"><span id="sc-h">0</span><b>-</b><span id="sc-a">0</span></div>
+      <div class="sb-team sb-away">VAR<i></i></div>
+      <div id="clock">00:00</div>
+    </div>
+    <button id="pause-btn" aria-label="Pause"><span></span><span></span></button>
+    <canvas id="radar" width="252" height="164"></canvas>
+    <div id="player-tag"><span id="pt-num">9</span><span id="pt-name">Z. Zorp</span><div id="stamina"><i></i></div></div>
+    <div id="power"><i></i></div>
+    <div id="banner"><div class="b1"></div><div class="b2"></div></div>
+    <div id="event"></div>
+    <div id="hint"></div>
+  </div>
+
+  <!-- TOUCH CONTROLS -->
+  <div id="controls" class="hidden">
+    <div id="joy-zone"></div>
+    <div id="joy-base" class="idle"><div id="joy-knob"></div></div>
+    <div id="buttons">
+      <button class="btn b-shoot" data-btn="shoot"><span>SHOOT</span></button>
+      <button class="btn b-pass" data-btn="pass"><span>PASS</span></button>
+      <button class="btn b-through" data-btn="through"><span>THROUGH</span></button>
+      <button class="btn b-sprint" data-btn="sprint"><span>SPRINT</span></button>
+      <button class="btn b-skill" data-btn="skill"><span>SKILL</span></button>
+    </div>
+  </div>
+
+  <!-- PAUSE -->
+  <div id="pause" class="screen hidden">
+    <div class="panel">
+      <h2>PAUSED</h2>
+      <button class="mbtn primary" id="resume-btn">Resume</button>
+      <button class="mbtn" id="restart-btn">Restart match</button>
+      <button class="mbtn" id="sound-btn">Sound: On</button>
+      <button class="mbtn" id="quit-btn">Quit to menu</button>
+      <div class="help">
+        <div><b>Attack</b> · PASS ground pass · THROUGH pass into space · hold SHOOT for power · SKILL feint &amp; burst</div>
+        <div><b>Defend</b> · SWITCH player · TACKLE · hold PRESS to chase · SLIDE tackle</div>
+        <div><b>Move</b> · left thumb anywhere · push to the edge to sprint</div>
+        <div class="kb">Keyboard: WASD/arrows · Space pass · K shoot · L through · Shift sprint · E skill</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FULL TIME -->
+  <div id="result" class="screen hidden">
+    <div class="panel wide">
+      <h3>FULL TIME</h3>
+      <div class="final">
+        <div class="ft-team"><div class="crest crest-home small"><span>Z</span></div>ZorpFC</div>
+        <div class="ft-score"><span id="ft-h">0</span>-<span id="ft-a">0</span></div>
+        <div class="ft-team"><div class="crest crest-away small"><span>V</span></div>Varcelona</div>
+      </div>
+      <div id="ft-msg"></div>
+      <table id="ft-stats"></table>
+      <div class="row">
+        <button class="mbtn primary" id="again-btn">Play again</button>
+        <button class="mbtn" id="menu-btn">Main menu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="rotate">
+    <div class="phone"></div>
+    <p>Rotate your phone to landscape</p>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
