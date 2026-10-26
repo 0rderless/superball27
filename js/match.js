@@ -368,15 +368,13 @@ export class Match {
     if (p.busy > 0 || p.stun > 0) { p.charging = false; return; }
     const hasBall = ball.owner === p;
 
-    const g = this.guarantee;
-    const lockRecv = p.recv && (p.recv.t < 0.35 || (g && g.to === p && !ball.owner));
-    if (mag > 0 && !lockRecv) {
+    // the receiver is free to move: an assisted pass follows him (see homePass)
+    if (mag > 0) {
       p.idleT = 0;
       p.manual = true;
       const sp = p.maxSpeed(sprint) * Math.min(1, 0.3 + mag);
       p.desired.copy(wdir).multiplyScalar(sp);
       p.sprint = sprint;
-      if (p.recv && p.recv.t > 0.35) p.recv = null;
     } else {
       p.idleT += dt;
       if (hasBall) {
@@ -821,6 +819,7 @@ export class Match {
         ball.pos.set(nx, Math.max(BALL_R, ball.pos.y - dt * 4), nz);
       }
     } else {
+      this.homePass(dt);
       const sub = Math.min(6, Math.max(1, Math.ceil(ball.speed * dt / 0.15)));
       for (let i = 0; i < sub; i++) {
         ball.step(dt / sub);
@@ -828,6 +827,28 @@ export class Match {
       }
     }
     ball.sync(dt);
+  }
+
+  // Assisted pass: steer the ball onto the receiver wherever he moves.
+  homePass(dt) {
+    const g = this.guarantee, ball = this.ball;
+    if (!g || g.id !== this.lastKick.id || this.phase !== 'play') return;
+    const r = g.to, v = ball.vel, b = ball.pos;
+    const h = Math.hypot(v.x, v.z);
+    const d0 = hdist(r.pos, b);
+    const lead = clamp(d0 / Math.max(h, 6), 0, 1) * 0.8;
+    // never lead him out of play: the ball waits on the pitch for him
+    const tx = clamp(r.pos.x + r.vel.x * lead + r.fwd.x * 0.5, -HL + 1.2, HL - 1.2);
+    const tz = clamp(r.pos.z + r.vel.z * lead + r.fwd.z * 0.5, -HW + 1.2, HW - 1.2);
+    const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz);
+    if (d < 0.05) return;
+    const onGround = b.y < 0.35;
+    // keep enough pace to always arrive, even if he runs away from it
+    let want = onGround ? clamp(Math.max(h, 4 + d * 0.55, Math.hypot(r.vel.x, r.vel.z) + 4), 0, 24) : h;
+    if (onGround && d < 2.5) want = Math.min(want, 2 + d * 2); // settle at the target spot
+    const k = 1 - Math.exp(-dt * (onGround ? 12 : 2.5));
+    const nx = v.x + (dx / d * want - v.x) * k, nz = v.z + (dz / d * want - v.z) * k;
+    v.x = nx; v.z = nz;
   }
 
   goalFrame() {
@@ -911,7 +932,7 @@ export class Match {
     const sp = ball.speed;
     // assisted pass: it always reaches the intended teammate
     let g = this.guarantee;
-    if (g && (g.id !== this.lastKick.id || g.t > 4.5)) g = this.guarantee = null;
+    if (g && (g.id !== this.lastKick.id || g.t > 7)) g = this.guarantee = null;
     if (g) {
       g.t += dt;
       const r = g.to;
@@ -1594,6 +1615,7 @@ export class Match {
   }
 
   gkReadShot(gk) {
+    if (this.guarantee) return; // assisted passes aren't shots
     const ball = this.ball, team = gk.team;
     const s = Math.sign(team.goalX);
     if (gk.lastKickSeen === this.kickId) return;
@@ -1664,6 +1686,7 @@ export class Match {
   gkSaveContact(gk) {
     const sv = gk.save, ball = this.ball;
     if (!sv) return;
+    if (this.guarantee) { gk.save = null; return; }
     if (this.time > sv.until) { gk.save = null; return; }
     if (!sv.willSave || ball.owner) return;
     if (Math.abs(ball.pos.x - gk.pos.x) > 0.9 || Math.abs(ball.pos.z - gk.pos.z) > (gk.action === 'dive' ? 1.6 : 1.0) || ball.pos.y > 2.8) return;
