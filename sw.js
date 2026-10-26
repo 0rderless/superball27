@@ -1,8 +1,8 @@
 // Offline cache for the home-screen app. Bump VERSION when shipping changes.
-const VERSION = 'sb27-v12';
+const VERSION = 'sb27-v13';
 const ASSETS = [
   './', './index.html', './manifest.json', './css/style.css',
-  './js/main.js', './js/match.js', './js/model.js', './js/ball.js', './js/stadium.js', './js/input.js', './js/audio.js', './js/config.js', './js/commentary.js', './js/squad.js', './js/cards.js', './js/clubs.js',
+  './js/main.js', './js/match.js', './js/model.js', './js/ball.js', './js/stadium.js', './js/input.js', './js/audio.js', './js/config.js', './js/commentary.js', './js/squad.js', './js/cards.js', './js/clubs.js', './js/dribble.js',
   './lib/three.module.min.js', './lib/GLTFLoader.js', './lib/SkeletonUtils.js', './lib/BufferGeometryUtils.js', './assets/player.glb', './assets/hero.jpg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png',
 ];
 
