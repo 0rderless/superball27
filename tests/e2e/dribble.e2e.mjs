@@ -53,6 +53,13 @@ const r = await page.evaluate(src => {
     stick(-0.6, 0); step(120);
     out.reception = { got, kept: m.ball.owner === c };
 
+    // knocked long, then he turns his back on it: he must go and collect it, never leave it behind
+    giveBall(c); stick(1, 0, true); step(90);
+    c.drib.v.set(c.vel.x + 4, 0, c.vel.z); m.ball.vel.copy(c.drib.v); c.drib.nextT = m.time + 2; step(10);
+    stick(-1, 0, true); let maxAway = 0;
+    for (let i = 0; i < 180; i++) { step(); maxAway = Math.max(maxAway, Math.hypot(m.ball.pos.x - c.pos.x, m.ball.pos.z - c.pos.z)); }
+    out.abandon = { maxAway: +maxAway.toFixed(2), kept: m.ball.owner === c, endD: +Math.hypot(m.ball.pos.x - c.pos.x, m.ball.pos.z - c.pos.z).toFixed(2) };
+
     giveBall(c); stick(0.65, 0); step(90); m.shoot(c, 0.8, null); let lastD = null;
     for (let i = 0; i < 90 && m.ball.owner === c; i++) { step(); lastD = Math.hypot(m.ball.pos.x - (c.pos.x + c.fwd.x * 0.5), m.ball.pos.z - (c.pos.z + c.fwd.z * 0.5)); }
     out.windup = { lastD: lastD && +lastD.toFixed(2), released: m.ball.owner !== c };
@@ -71,5 +78,6 @@ check(res, 'cut 90° at sprint keeps it', r.cut90.kept);
 check(res, 'turn-back at sprint keeps it', r.turnBack.kept);
 check(res, 'idle keeps ball under the feet', r.idle.kept && r.idle.maxD <= 0.55, r.idle);
 check(res, 'fast reception (18 m/s) controlled and kept', r.reception.got && r.reception.kept, r.reception);
+check(res, 'turning away from a long touch: he collects it (never > 3.5m, back at the feet)', r.abandon.kept && r.abandon.maxAway <= 3.5 && r.abandon.endD <= 1.2, r.abandon);
 check(res, 'wind-up draws ball to the kicking foot', r.windup.released && r.windup.lastD !== null && r.windup.lastD <= 0.6, r.windup);
 await finish(browser, page, res);

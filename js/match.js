@@ -1068,10 +1068,12 @@ export class Match {
     }
   }
 
-  tackle(p, slide) {
+  // aimAt: where to lunge (AI defenders aim where the ball is going); defaults to the ball
+  tackle(p, slide, aimAt = null) {
     if (!p || p.busy > 0 || p.tackleCD > 0 || p.stun > 0) return;
     const ball = this.ball;
-    const toBall = new V3(ball.pos.x - p.pos.x, 0, ball.pos.z - p.pos.z);
+    const at = aimAt || ball.pos;
+    const toBall = new V3(at.x - p.pos.x, 0, at.z - p.pos.z);
     const d = toBall.length();
     const dir = d < 5 && d > 0.01 ? toBall.normalize() : p.fwd.clone();
     p.action = slide ? 'slide' : 'tackle';
@@ -1106,10 +1108,9 @@ export class Match {
       else this.gainBall(p, false);
       return;
     }
-    const e = Math.max(0, exposure({ ball: ball.pos, body: o.pos, defender: p.pos }) - (o.skillT > 0 ? 0.35 : 0));
-    let rnd = Math.random();
-    if (!p.team.isUser) rnd = rnd * (0.65 + 0.35 * this.diff.tackle);
-    const res = tackleOutcome({ exposure: e, def: p.st.def, dri: o.st.dri, phy: o.st.phy || 0.7, slide, rnd });
+    let e = Math.max(0, exposure({ ball: ball.pos, body: o.pos, defender: p.pos }) - (o.skillT > 0 ? 0.35 : 0));
+    if (!p.team.isUser) e += this.aiDefQuality();
+    const res = tackleOutcome({ exposure: e, def: p.st.def, dri: o.st.dri, phy: o.st.phy || 0.7, slide, rnd: Math.random() });
     if (res === 'miss') {
       // mistimed: he's off balance and the dribbler is away
       p.stun = 0.5; p.a.hitT = 0; p.a.hitBig = false;
@@ -1187,6 +1188,59 @@ export class Match {
   // Footstep dribbling: the ball is touched only when a foot lands (o.a.strike), and every touch
   // rolls it onto a slot in front of the next footfall (see js/dribble.js). It is never lost
   // without a challenge: tackles, pokes, passes and shots are the only ways it leaves him.
+  // how much cleaner AI challenges are on harder levels (Beginner -0.10 … Legend +0.06)
+  aiDefQuality() { return (this.diff.tackle - 1) * 0.15; }
+
+  // AI defender's standing tackle, timed by the difficulty's reaction time.
+  aiTackle(p, owner, d, dt) {
+    if (p.tackleCD > 0 || d > 2.2) { p.tkSeen = 0; return; }
+    // he reacts to what he sees: the ball out away from the dribbler's feet and within his reach.
+    // Quick defenders (harder levels) go in while it's still out; slow ones arrive as it comes back.
+    const b = this.ball.pos, bv = this.ball.vel;
+    // already standing in the ball's path? stay put and let it run into him (no need to dive in)
+    const bs = Math.hypot(bv.x, bv.z);
+    if (bs > 1) {
+      const rx = p.pos.x - b.x, rz = p.pos.z - b.z;
+      const ahead = (rx * bv.x + rz * bv.z) / bs, off = Math.abs(rx * bv.z - rz * bv.x) / bs;
+      if (ahead > 0 && ahead < 4 && off < 0.45) { p.tkSeen = 0; return; }
+    }
+    const e = exposure({ ball: b, body: owner.pos, defender: p.pos });
+    // and never dive at a ball that's running away from him
+    const rdx = b.x - p.pos.x, rdz = b.z - p.pos.z, rd = Math.hypot(rdx, rdz) || 1;
+    const away = ((bv.x - p.vel.x) * rdx + (bv.z - p.vel.z) * rdz) / rd;
+    // a standing tackle can't catch a runner from behind: he must be level with the ball or ahead of it
+    const ov = owner.vel, os = Math.hypot(ov.x, ov.z);
+    const level = os < 2 || (-rdx * ov.x - rdz * ov.z) / os > -0.3;
+    if (e > 0.5 && rd < 1.6 && away < 2 && level) {
+      if (!p.tkSeen) p.tkWait = this.diff.react * rand(0.6, 1.2);
+      p.tkSeen = (p.tkSeen || 0) + dt;
+      if (p.tkSeen >= p.tkWait) {
+        p.tkSeen = 0;
+        this.tackle(p, false, { x: b.x + bv.x * 0.15, z: b.z + bv.z * 0.15 });
+        return;
+      }
+    } else p.tkSeen = 0;
+    // weaker sides also lunge in hope
+    if (d < 1.9 && Math.random() < dt * 1.4 * Math.max(0, 1.1 - this.diff.tackle)) this.tackle(p, false);
+  }
+
+  // The ball has got away from him (a long touch, then he turned): he goes and gets it before
+  // following the stick again, so a dribbler never leaves the ball behind.
+  collectSteer(p) {
+    const b = this.ball.pos, bv = this.ball.vel;
+    const dx = b.x - p.pos.x, dz = b.z - p.pos.z, d = Math.hypot(dx, dz);
+    const reach = slotDistance(Math.hypot(p.vel.x, p.vel.z), p.st.dri) + 0.6;
+    if (d <= reach) return;
+    const dsp = Math.hypot(p.desired.x, p.desired.z);
+    // already heading at it? leave him be
+    if (dsp > 0.4 && (p.desired.x * dx + p.desired.z * dz) / (dsp * d) > 0.7) return;
+    // aim where the ball will be, at the pace he wanted (at least a jog)
+    const t = Math.min(0.6, d / 7);
+    const tx = dx + bv.x * t, tz = dz + bv.z * t, tl = Math.hypot(tx, tz) || 1;
+    const sp = Math.max(dsp, p.maxSpeed(false));
+    p.desired.set(tx / tl * sp, 0, tz / tl * sp);
+  }
+
   // the ball is knocked away from the dribbler by a challenge
   knockLoose(o, by, speed) {
     const ball = this.ball;
@@ -1235,6 +1289,12 @@ export class Match {
     }
     let relX = b.x - o.pos.x, relZ = b.z - o.pos.z;
     const dist = Math.hypot(relX, relZ);
+    if (dist > 4) {
+      // safety net (collectSteer should never let this happen): no possession of a ball 4m away
+      ball.owner = null; ball.vel.set(D.v.x, 0, D.v.z); o.drib = null; o.cool = 0.2;
+      this.kickId++; this.lastKick = { kind: 'loose', team: o.team, id: this.kickId, by: o };
+      return;
+    }
     let ahead = relX * hx + relZ * hz, side = relX * rx + relZ * rz;
     const bAng = Math.atan2(side, ahead); // 0 = straight ahead of his run
     if (D.plant > 0) {
@@ -1421,13 +1481,18 @@ export class Match {
           return;
         }
         // a poke at an exposed ball (only when it's out away from the dribbler's feet)
-        if ((d.pokeCD || 0) > 0) continue;
+        // he has to see it first: reaction time by difficulty (instant for the player's own man),
+        // counted from when the ball is exposed near him, not from when it reaches his foot
+        if (hdist(d.pos, ball.pos) > 2.5) { d.exposedT = 0; continue; }
+        const e = exposure({ ball: ball.pos, body: o.pos, defender: d.pos });
+        if (e <= 0.5) { d.exposedT = 0; continue; }
+        d.exposedT = (d.exposedT || 0) + dt;
+        const react = d.team.isUser ? (d === d.team.controlled ? 0 : 0.25) : this.diff.react * 0.6;
+        if ((d.pokeCD || 0) > 0 || d.exposedT < react) continue;
         const fx = d.pos.x + d.fwd.x * 0.4, fz = d.pos.z + d.fwd.z * 0.4;
         if (Math.hypot(ball.pos.x - fx, ball.pos.z - fz) > 0.7) continue;
-        const e = exposure({ ball: ball.pos, body: o.pos, defender: d.pos });
-        if (e <= 0.5) continue;
         d.pokeCD = 0.6;
-        const res = tackleOutcome({ exposure: e, def: d.st.def, dri: o.st.dri, phy: o.st.phy || 0.7, slide: false, rnd: Math.random() });
+        const res = tackleOutcome({ exposure: e + (d.team.isUser ? 0 : this.aiDefQuality()), def: d.st.def, dri: o.st.dri, phy: o.st.phy || 0.7, slide: false, rnd: Math.random() });
         if (res === 'miss') continue;
         o.stun = 0.35; o.a.hitT = 0; o.a.hitBig = false;
         if (res === 'win') this.gainBall(d, false);
@@ -1923,11 +1988,19 @@ export class Match {
         const og = new V3(team.goalX, 0, 0);
         const toGoal = og.sub(owner.pos).setY(0).normalize();
         const userTeamPassive = team.isUser && !team.callPress;
-        const standOff = userTeamPassive ? 1.5 : 1.0;
         const d = hdist(p.pos, owner.pos);
+        // AI: contain first (stand off ~1.6m), then step in and stand in his path. Good defenders
+        // (harder levels) stay patient; weaker ones rush in and get turned. A carrier who isn't
+        // sprinting gets closed down faster.
+        if (p.containOn !== owner || d > 6) { p.containOn = owner; p.containT = 0; }
+        if (d < 4.5) p.containT += dt * (owner.sprint ? 1 : 1.6) * (1.5 - 0.6 * this.diff.press);
+        const standOff = userTeamPassive ? 1.5 : team.isUser ? 1.0 : Math.max(0.55, 1.6 - p.containT * 0.9);
         tgt.copy(owner.pos).addScaledVector(owner.vel, d > 4 ? 0.55 : 0.3).addScaledVector(toGoal, standOff);
-        p.goTo(tgt, d > 5 ? p.maxSpeed(true) * (team.isUser ? 1 : this.diff.press) : p.maxSpeed(true) * 0.95, 0.8);
-        if (d < 4.5) {
+        // is he goal-side (between the carrier and goal)? if not, race to get there first
+        const goalSide = ((p.pos.x - owner.pos.x) * toGoal.x + (p.pos.z - owner.pos.z) * toGoal.z) > 0.6;
+        // brake into the jockey: arrive gently instead of flying past him
+        p.goTo(tgt, d > 5 || !goalSide ? p.maxSpeed(true) * (team.isUser ? 1 : this.diff.press) : p.maxSpeed(true) * 0.95, team.isUser || !goalSide ? 0.8 : 3);
+        if (d < 4.5 && (goalSide || team.isUser)) {
           // jockey: match the carrier's run while closing the gap
           const ov = owner.vel;
           p.desired.x = p.desired.x * 0.55 + ov.x * 0.5;
@@ -1935,7 +2008,7 @@ export class Match {
           p.faceTo = owner.pos;
           p.jockey = true;
         }
-        if (!team.isUser && d < 1.9 && p.tackleCD <= 0 && Math.random() < dt * 1.4 * this.diff.tackle) this.tackle(p, false);
+        if (!team.isUser) this.aiTackle(p, owner, d, dt);
         if (team.isUser && d < 1.7 && p.tackleCD <= 0 && Math.random() < dt * (team.callPress ? 1.5 : 0.55)) this.tackle(p, false);
         continue;
       }
@@ -1948,7 +2021,7 @@ export class Match {
         tgt.copy(owner.pos).addScaledVector(owner.vel, 0.4).addScaledVector(toGoal, danger ? 3.2 : Math.min(7, L * 0.35));
         p.goToAuto(tgt, danger);
         const dc = hdist(p.pos, owner.pos);
-        if (!team.isUser && dc < 1.7 && p.tackleCD <= 0 && Math.random() < dt * 0.9 * this.diff.tackle) this.tackle(p, false);
+        if (!team.isUser) this.aiTackle(p, owner, dc, dt);
         continue;
       }
       this.formationTarget(p, attacking, aB, cB, tgt);
@@ -2124,6 +2197,23 @@ export class Match {
       if (Math.abs(p.pos.z) > HW - 4) base.z -= Math.sign(p.pos.z) * 0.8;
       p.dribbleDir.copy(base.setY(0).normalize());
       p.sprint = space > 7 && near.d > 2.2;
+    }
+    // don't run the ball into a defender: cut away from one standing in the path
+    p.evadeCD = (p.evadeCD || 0) - dt;
+    if (near.p && near.d < 7 && p.evadeCD <= 0) {
+      const ox = near.p.pos.x - p.pos.x, oz = near.p.pos.z - p.pos.z;
+      const dd = p.dribbleDir, along = (ox * dd.x + oz * dd.z) / near.d;
+      // how soon will we meet? (closing speed along the line between us)
+      const close = ((p.vel.x - near.p.vel.x) * ox + (p.vel.z - near.p.vel.z) * oz) / near.d;
+      const ttc = close > 0.5 ? (near.d - 1) / close : near.d < 2.2 ? 0 : 9;
+      if (along > 0.4 && ttc < 0.6) {
+        const side = Math.sign(ox * dd.z - oz * dd.x) || 1; // which side of my path he's on
+        const a = Math.atan2(dd.x, dd.z) + side * (along > 0.85 ? rand(1.2, 1.7) : rand(0.8, 1.2));
+        p.dribbleDir.set(Math.sin(a), 0, Math.cos(a));
+        if (Math.abs(p.pos.z + p.dribbleDir.z * 4) > HW - 2) p.dribbleDir.z *= -1;
+        p.evadeCD = rand(0.5, 0.8);
+        p.think = 0; // and look for a pass right now
+      }
     }
     if (near.d < 2.4 && (p.skillCD || 0) <= 0 && Math.random() < dt * 0.9 * p.st.dri * this.diff.press) {
       this.skillMove(p, Math.random() < 0.5 ? 'left' : 'right');
@@ -2371,6 +2461,7 @@ export class Match {
       const free = p.action !== 'slide' && p.action !== 'dive';
       if (p.stun > 0) p.desired.multiplyScalar(0.25);
       if (free) {
+        if (ball.owner === p && p.drib) this.collectSteer(p);
         this.locomote(p, dt, ball.owner === p);
       } else {
         const fr = p.action === 'slide' ? 7 : (p.actionT > 0.55 ? 14 : 1.5);
@@ -2425,7 +2516,9 @@ export class Match {
         if (d2 < 0.5 && d2 > 1e-6) {
           const d = Math.sqrt(d2), push = (0.707 - d) * 0.5;
           const nx = dx / d, nz = dz / d;
-          const wa = a === this.ball.owner ? 0.8 : 1, wb = b === this.ball.owner ? 0.8 : 1;
+          // shoulder to shoulder: the stronger man holds his line
+          const pa = (a.st.phy || 0.7) ** 2, pb = (b.st.phy || 0.7) ** 2;
+          const wa = 2 * pb / (pa + pb), wb = 2 * pa / (pa + pb);
           a.pos.x -= nx * push * wa; a.pos.z -= nz * push * wa;
           b.pos.x += nx * push * wb; b.pos.z += nz * push * wb;
         }
