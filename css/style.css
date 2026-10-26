@@ -638,3 +638,50 @@ button:active { transform: scale(.97); }
 #layout-edit .le-bar b { font-family: var(--display); font-size: 17px; text-transform: uppercase; letter-spacing: .5px; }
 #controls.editing { z-index: 44; }
 #controls.editing .btn { outline: 2px dashed rgba(255, 255, 255, .8); outline-offset: 4px; }
+
+/* ---------- FC Mobile-style home ---------- */
+#menu .ticker { display: none; }
+.topbar { margin-bottom: 8px; }
+.profile { display: flex; align-items: center; gap: 10px; padding: 5px 14px 5px 6px; background: linear-gradient(90deg, rgba(44,242,181,.16), rgba(14,17,26,.9) 60%); border: 1px solid var(--line-2); clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+.pf-crest .club-crest { display: block; }
+.pf-txt b { display: block; font-family: var(--display); font-style: italic; font-size: 21px; line-height: 1; text-transform: uppercase; }
+.pf-txt small { display: flex; gap: 8px; align-items: center; color: var(--muted); font-weight: 700; font-size: 12px; margin-top: 2px; }
+.pf-ovr { color: #04120d; background: var(--cyan); padding: 0 6px; border-radius: 4px; font-weight: 800; }
+.pf-ovr i { font-style: normal; }
+#page-play { grid-template-columns: 1.45fr 1fr; }
+.tile-hero { clip-path: polygon(0 0, 100% 0, calc(100% - 26px) 100%, 0 100%); border-radius: 6px; padding-right: 40px; }
+.tile-hero .tile-title { font-size: clamp(38px, 13vh, 72px); }
+.tile-tag { background: var(--cyan); color: #04120d; border: 0; border-radius: 4px; letter-spacing: 1.5px; font-weight: 800; }
+.tile-tag i { background: #04120d; box-shadow: none; }
+.play-cta { position: absolute !important; right: 34px; bottom: 16px; display: flex; align-items: center; gap: 8px; padding: 10px 30px 10px 26px; font-family: var(--display); font-style: italic; font-weight: 800; font-size: 30px; color: #1a1200; background: linear-gradient(180deg, #ffe45c, #ffbf00); clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%); box-shadow: 0 10px 26px rgba(255,180,0,.45); animation: fab 2.2s ease-in-out infinite; }
+.play-cta .ico { width: 24px; height: 24px; }
+.hub-col { grid-template-rows: 1fr auto auto; }
+.hub-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-height: 0; }
+.tile-card { display: flex; flex-direction: column; align-items: center; padding: 8px 8px 6px; gap: 4px; min-height: 0; border-radius: 6px; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%); background: linear-gradient(160deg, rgba(31,107,255,.28), rgba(14,17,26,.94) 55%); }
+.tile-store { background: linear-gradient(160deg, rgba(255,191,0,.25), rgba(14,17,26,.94) 55%); }
+.tc-head { align-self: stretch; display: flex; justify-content: space-between; align-items: baseline; }
+.tc-head b { font-family: var(--display); font-style: italic; font-size: 18px; letter-spacing: .5px; }
+.tc-head small { color: var(--muted); font-weight: 700; font-size: 11px; }
+.tc-card { flex: 1; min-height: 0; display: grid; place-items: center; }
+.tc-card .pcard { font-size: 5.8px; }
+.tile-card .tt-stars { display: none; }
+.tile-quick, .tile-small { border-radius: 6px; }
+/* bottom navigation bar */
+.bottom-nav { order: 9; margin-top: 8px; align-self: center; gap: 2px; padding: 3px; border-radius: 8px; background: rgba(10,12,18,.92); }
+.bottom-nav button { flex-direction: column; gap: 1px; padding: 4px 26px; font-size: 12px; border-radius: 6px; }
+.bottom-nav button .ico { width: 20px; height: 20px; }
+.bottom-nav button.on { color: #04120d; background: var(--cyan); box-shadow: none; }
+@media (max-height: 430px) {
+  .tc-card .pcard { font-size: 4.6px; }
+  .play-cta { font-size: 24px; padding: 7px 24px 7px 20px; }
+  .bottom-nav button { padding: 3px 22px; }
+}
+#page-play #menu-controls { display: none; }
+.hub-col { grid-template-rows: minmax(0, 1fr) auto; }
+#page-play .tile-quick { padding: 8px 10px; gap: 6px; }
+#page-play .q-row { display: flex; align-items: center; gap: 8px; }
+#page-play .q-row label { flex: none; width: 74px; font-size: 10px; letter-spacing: 1px; }
+#page-play .q-row .seg { flex: 1; }
+#page-play .q-row .seg button { padding: 4px 2px; font-size: 12px; }
+.tc-card .pcard { font-size: 9px; }
+@media (max-height: 430px) { .tc-card .pcard { font-size: 7.4px; } }

@@ -82,12 +82,10 @@
   <!-- ============ MAIN MENU ============ -->
   <div id="menu" class="screen hidden">
     <header class="topbar">
-      <div class="brand"><div class="brand-mark">27</div><div class="brand-txt"><b>SUPERBALL 27</b><small>Ontronop Games</small></div></div>
-      <nav class="tabs" id="tabs">
-        <button data-tab="play" class="on"><svg class="ico"><use href="#i-ball"/></svg><span>Play</span></button>
-        <button data-tab="squad"><svg class="ico"><use href="#i-shirt"/></svg><span>Squad</span></button>
-        <button data-tab="shop"><svg class="ico"><use href="#i-cart"/></svg><span>Shop</span><i class="dot" id="shop-dot"></i></button>
-      </nav>
+      <div class="profile" id="profile">
+        <div class="pf-crest" id="pf-crest"></div>
+        <div class="pf-txt"><b>ZorpFC</b><small><span class="pf-ovr">OVR <i id="team-ovr">80</i></span><span id="team-record">0W 0D 0L</span></small></div>
+      </div>
       <div class="top-actions">
         <div class="coin-pill"><svg class="ico"><use href="#i-coin"/></svg><b id="coins">0</b></div>
         <button class="icon-btn" id="fs-btn" aria-label="Full screen"><svg class="ico"><use href="#i-full"/></svg></button>
@@ -99,21 +97,28 @@
       <button class="tile tile-hero" id="play-btn">
         <div class="hero-art"></div>
         <div class="hero-shade"></div>
-        <div class="tile-tag"><i></i>ONLINE-STYLE MATCHMAKING · VS AI CLUBS</div>
-        <div class="tile-title">FIND MATCH</div>
+        <div class="tile-tag"><i></i>VS AI CLUBS</div>
+        <div class="tile-title">KICK OFF</div>
         <div class="matchup">
           <div class="mu-team"><div class="crest crest-home"><span>Z</span></div><b>ZorpFC</b></div>
           <div class="mu-vs">VS</div>
           <div class="mu-team"><div class="crest crest-q"><span>?</span></div><b>11 top clubs</b></div>
         </div>
         <div class="tile-meta"><span id="meta-diff">Pro</span><span id="meta-len">6 min</span><span id="meta-cam">Broadcast</span></div>
-        <div class="play-fab"><svg class="ico"><use href="#i-play"/></svg></div>
+        <div class="play-cta"><span>PLAY</span><svg class="ico"><use href="#i-play"/></svg></div>
       </button>
       <div class="hub-col">
-        <button class="tile tile-team" id="team-tile">
-          <div class="tt-ovr"><b id="team-ovr">80</b><small>TEAM OVR</small></div>
-          <div class="tt-info"><b>ZorpFC</b><small><span id="team-form">4-3-3</span> · <span id="team-record">0W 0D 0L</span></small><div class="tt-stars" id="team-stars"></div></div>
-        </button>
+        <div class="hub-pair">
+          <button class="tile tile-card" id="team-tile">
+            <div class="tc-head"><b>TEAM</b><small><span id="team-form">4-3-3</span></small></div>
+            <div class="tc-card" id="team-card"></div>
+            <div class="tt-stars" id="team-stars"></div>
+          </button>
+          <button class="tile tile-card tile-store" id="store-tile">
+            <div class="tc-head"><b>STORE</b><small>Sign players</small></div>
+            <div class="tc-card" id="store-card"></div>
+          </button>
+        </div>
         <div class="tile tile-quick">
           <div class="q-row" data-quick="difficulty"><label>Difficulty</label><div class="seg"></div></div>
           <div class="q-row" data-quick="minutes"><label>Match length</label><div class="seg"></div></div>
@@ -142,6 +147,12 @@
       </div>
       <div class="shop-grid" id="shop-grid"></div>
     </main>
+    <nav class="tabs bottom-nav" id="tabs">
+      <button data-tab="play" class="on"><svg class="ico"><use href="#i-ball"/></svg><span>Home</span></button>
+      <button data-tab="squad"><svg class="ico"><use href="#i-shirt"/></svg><span>Team</span></button>
+      <button data-tab="shop"><svg class="ico"><use href="#i-cart"/></svg><span>Store</span><i class="dot" id="shop-dot"></i></button>
+    </nav>
+
 
     <footer class="ticker"><span class="tk-label">TIP</span><span id="tip-text"></span><span class="install-tip" id="install-tip"><svg class="ico"><use href="#i-phone"/></svg>Add to Home Screen for full-screen play</span></footer>
     <div class="toast" id="toast"></div>

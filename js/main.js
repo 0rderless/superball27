@@ -6,7 +6,7 @@ import { Commentary } from './commentary.js';
 import { Input } from './input.js';
 import { Sound } from './audio.js';
 import { F, DIFFICULTY, DIFF_KEYS, TEAMS, FORMATIONS } from './config.js';
-import { CLUBS, teamConfig, crestSVG } from './clubs.js';
+import { CLUBS, teamConfig, crestSVG, zorpCrestSVG } from './clubs.js';
 import * as SQ from './squad.js';
 import { card, clubCard, avatar } from './cards.js';
 
@@ -25,7 +25,7 @@ const weakDevice = (navigator.hardwareConcurrency || 4) <= 4 && /Android/i.test(
 const legacyAssist = store.get('assist', 'on') !== 'off';
 const DEFAULTS = {
   difficulty: 'pro', minutes: 6, camera: 'broadcast', camZoom: 100, graphics: weakDevice ? 'low' : 'high',
-  passAssist: legacyAssist, autoSwitch: legacyAssist, autoSprint: true, defAssist: true,
+  passAssist: legacyAssist, autoSwitch: legacyAssist, autoSprint: true, defAssist: true, dribAssist: true,
   volume: 90, crowd: 100, sound: true, commentary: true,
   radar: true, fps: false, btnSize: 1, vibration: true, joyFixed: false,
 };
@@ -307,6 +307,12 @@ function syncMenu() {
   $('team-record').textContent = `${pr.record.w}W ${pr.record.d}D ${pr.record.l}L`;
   $('team-form').textContent = SQ.formationName();
   $('team-stars').innerHTML = pr.lineup.filter(id => SQ.DB[id].star).map(id => `<span>${SQ.DB[id].name} ${SQ.ovr(id)}</span>`).join('');
+  // FC-style home tiles: club badge, your best player, the next signing in the store
+  $('pf-crest').innerHTML = zorpCrestSVG(40);
+  const best = pr.lineup.slice().sort((a, b) => SQ.ovr(b) - SQ.ovr(a))[0];
+  $('team-card').innerHTML = card(best);
+  const next = SQ.SHOP.filter(id => !pr.owned.includes(id)).sort((a, b) => SQ.ovr(b) - SQ.ovr(a))[0] || SQ.SHOP[0];
+  $('store-card').innerHTML = card(next);
   updateCoins();
 }
 
@@ -322,6 +328,7 @@ function setTab(t) {
 }
 $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setTab(b.dataset.tab); });
 $('team-tile').addEventListener('click', () => setTab('squad'));
+$('store-tile').addEventListener('click', () => setTab('shop'));
 
 let coinShown = null;
 function updateCoins() {
@@ -719,6 +726,7 @@ const SCHEMA = [
   { tab: 'Gameplay', key: 'passAssist', label: 'Pass assist', desc: 'Passes go to who you aim at and follow him', type: 'toggle' },
   { tab: 'Gameplay', key: 'autoSwitch', label: 'Auto switch', desc: 'Control the closest defender automatically', type: 'toggle' },
   { tab: 'Gameplay', key: 'autoSprint', label: 'Auto sprint', desc: 'Push the joystick to the edge to sprint', type: 'toggle' },
+  { tab: 'Gameplay', key: 'dribAssist', label: 'Dribble assist', desc: 'Closer ball control and quicker turns for your players', type: 'toggle' },
   { tab: 'Gameplay', key: 'defAssist', label: 'Defence assist', desc: 'Hold SPRINT (no stick) to press and contain the man on the ball', type: 'toggle' },
   { tab: 'Camera', key: 'camera', type: 'cams' },
   { tab: 'Camera', key: 'camZoom', label: 'Camera distance', desc: 'Closer or further than the preset', type: 'range', min: 80, max: 125, step: 5, unit: '%' },

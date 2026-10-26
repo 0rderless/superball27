@@ -1345,7 +1345,10 @@ export class Match {
       D.v.set(o.vel.x, 0, o.vel.z);
     }
     const strike = o.a.strike;
-    const slot = slotDistance(sp, ctrl);
+    // dribble assist (your team, on by default): closer ball, instant cuts, stronger steering
+    const easy = o.team.isUser && this.settings.dribAssist !== false;
+    const near = easy ? 0.75 : 1;
+    const slot = slotDistance(sp, ctrl) * near;
     if (dsp < 0.4 && sp < 1.6) {
       // standing / stopping: sole on it, settled just in front (no footfalls needed)
       const k = 1 - Math.exp(-dt * 8);
@@ -1363,18 +1366,18 @@ export class Match {
     // (the footfall the last touch was planned for, or sooner if he's about to run over it)
     const atFoot = ahead > -0.2 && Math.abs(side) < 0.5 &&
       ((this.time >= D.nextT - 0.05 && ahead < FOOT_REACH + 0.32) || ahead < FOOT_REACH + 0.04);
-    const canCut = errD > 0.35 && dist < slot + 0.5 && ahead > -0.2 && this.time - D.lastTouchT > 0.08;
+    const canCut = errD > (easy ? 0.25 : 0.35) && dist < slot + 0.5 && ahead > -0.2 && this.time - D.lastTouchT > 0.08;
     const letGo = dsp < 0.4 || (o.letGo && o.team.isUser && o === o.team.controlled);
     const runningAway = ahead > FOOT_REACH + 0.15 && D.v.x * hx + D.v.z * hz > sp;
     if ((strike || runningAway) && letGo && sp > 0.6 && dist < slot + 0.6 && ahead > -0.2) {
       // stick released: this footfall (or a stretch, if it's running away) traps it under the sole
       D.plant = clamp(sp * 0.08, 0.2, 0.6); D.px = hx; D.pz = hz;
       touch(0, 0, strike || (o.a.touchFoot === 'R' ? 'L' : 'R'));
-    } else if ((strike && (atFoot || canCut)) || (o.a.swing && canCut)) {
+    } else if ((strike && (atFoot || canCut)) || ((o.a.swing || easy) && canCut)) {
       if (errD > 1.9 && sp > 2.2) {
         // turning back: plant and stop it with the sole so it doesn't run away
         D.plant = clamp(sp * 0.06, 0.25, 0.5); D.px = hx; D.pz = hz;
-        touch(0, 0, strike || o.a.swing);
+        touch(0, 0, strike || o.a.swing || 'R');
       } else {
         // along the run, or into the turn with the inside/outside of the foot
         let dx = ux, dz = uz, vel = o.vel;
@@ -1384,8 +1387,8 @@ export class Match {
           const tsp = Math.min(dsp, sp);
           vel = { x: o.vel.x * 0.3 + dx * tsp * 0.7, z: o.vel.z * 0.3 + dz * tsp * 0.7 };
         }
-        const { v, T } = planTouch({ ball: b, pos: o.pos, vel, dir: { x: dx, z: dz }, sp, dri: ctrl, phase: o.a.gait, scale: errD > 0.45 ? 0.45 : 1 });
-        touch(v.x, v.z, strike || o.a.swing, errD > 0.45 ? sgnD : 0, T);
+        const { v, T } = planTouch({ ball: b, pos: o.pos, vel, dir: { x: dx, z: dz }, sp, dri: ctrl, phase: o.a.gait, scale: errD > 0.45 ? 0.45 : near });
+        touch(v.x, v.z, strike || o.a.swing || (o.a.touchFoot === 'R' ? 'L' : 'R'), errD > 0.45 ? sgnD : 0, T);
       }
     }
     // between touches he guides it with the outside/inside of the foot: a rolling ball within his
@@ -1393,7 +1396,8 @@ export class Match {
     const gs = Math.hypot(D.v.x, D.v.z);
     if (dsp > 0.4 && gs > 0.5 && dist < slot + 0.5 && !letGo && D.plant <= 0 && errD < 0.6) {
       const cur = Math.atan2(D.v.x, D.v.z), want = Math.atan2(ux, uz);
-      const turn = clamp(wrap(want - cur), -(3 + 3 * ctrl) * dt, (3 + 3 * ctrl) * dt);
+      const rate = (easy ? 5 + 4 * ctrl : 3 + 3 * ctrl) * dt;
+      const turn = clamp(wrap(want - cur), -rate, rate);
       D.v.set(Math.sin(cur + turn) * gs, 0, Math.cos(cur + turn) * gs);
     }
     // roll
