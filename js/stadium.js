@@ -152,7 +152,7 @@ function adTexture() {
   const ads = [
     ['SUPERBALL 27', '#0a1440', '#ffffff'],
     ['ZORP ENERGY', '#1557ff', '#ffffff'],
-    ['VARCA AIR', '#d8141e', '#ffd23f'],
+    ['CLUB WORLD CUP', '#d8141e', '#ffd23f'],
     ['GOAL.TV', '#111111', '#39ff88'],
     ['ZORPFC', '#ffffff', '#1557ff'],
     ['NEON BOOTS', '#ff3d7f', '#ffffff'],

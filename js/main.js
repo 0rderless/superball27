@@ -5,9 +5,10 @@ import { loadPlayerAssets } from './model.js';
 import { Commentary } from './commentary.js';
 import { Input } from './input.js';
 import { Sound } from './audio.js';
-import { F, DIFFICULTY, TEAMS } from './config.js';
+import { F, DIFFICULTY, DIFF_KEYS, TEAMS } from './config.js';
+import { CLUBS, teamConfig, crestSVG } from './clubs.js';
 import * as SQ from './squad.js';
-import { card, statRows } from './cards.js';
+import { card, clubCard } from './cards.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -145,8 +146,9 @@ const hooks = {
     clearTimeout(eventTimer);
     eventTimer = setTimeout(() => ui.event.classList.remove('show'), 1300);
   },
-  goal(team, name) {
+  goal(team, name, own) {
     const c = match.scorer ? match.scorer.pos : match.ball.pos;
+    if (!own && match.scorer) showGoalCard(match.scorer);
     if (stadium) stadium.confetti(c.x, c.z, team.isUser ? ['#1d5cff', '#ffffff', '#ffd21f', '#4f86ff'] : ['#e0202a', '#ffd23f', '#8e0a12']);
     hooks.banner('GOAL!', `${name}  ${match.home.score} - ${match.away.score}`, 3300, team.isUser ? 'home' : 'away');
     vibrate(team.isUser ? [60, 40, 120] : 40);
@@ -167,10 +169,52 @@ function newMatch() {
   if (!assetsReady) return;
   if (match) match.dispose();
   TEAMS.home.players = SQ.lineupForMatch(); // your starting XI from Squad
+  TEAMS.away = teamConfig(opponent);
   match = new Match(scene, sound, settings, hooks);
+  match.diff = effDiff();
+  syncOpponentUI();
 }
 
-const SCREENS = ['boot', 'menu', 'prematch', 'pause', 'result'];
+// ---------------------------------------------------------------- opponent club
+let opponent = CLUBS[(Math.random() * CLUBS.length) | 0];
+// AI strength = difficulty, scaled by how good the club is
+function effDiff() {
+  const d = { ...(DIFFICULTY[settings.difficulty] || DIFFICULTY.pro) };
+  const k = (opponent.ovr - 84) / 100;
+  d.speed *= 1 + k * 0.6;
+  d.tackle *= 1 + k * 1.5;
+  d.press *= 1 + k * 0.8;
+  d.gk = Math.min(0.97, d.gk + k * 0.6);
+  d.shootErr *= 1 - k * 1.5;
+  d.react *= 1 - k;
+  return d;
+}
+function syncOpponentUI() {
+  const kitCol = TEAMS.away.kit.shirt;
+  $('sb-away-name').textContent = opponent.short;
+  $('sb-away-col').style.background = opponent.color;
+  $('sb-away-col').style.color = opponent.color;
+  $('pp-a').textContent = opponent.short;
+  $('pp-a').style.color = kitCol === '#f4f4f4' || kitCol === '#f2f2f2' ? '#e8e8e8' : opponent.color;
+  $('pm-away-crest').innerHTML = crestSVG(opponent);
+  $('pm-away-name').textContent = opponent.name;
+  $('pm-away-sub').textContent = `AWAY · OVR ${opponent.ovr}`;
+  $('pm-home-sub').textContent = `HOME · OVR ${SQ.teamOvr()}`;
+  $('ft-away-crest').innerHTML = crestSVG(opponent);
+  $('ft-away-name').textContent = opponent.name;
+}
+
+let goalCardTimer = 0;
+function showGoalCard(pl) {
+  const el = $('goal-card');
+  const html = pl.team.isUser && pl.data.id ? card(pl.data.id) : clubCard(pl.data, pl.team.cfg.kit);
+  el.innerHTML = html + `<div class="gc-tag">${pl.team.isUser ? 'ZORPFC' : opponent.short} · GOAL</div>`;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  clearTimeout(goalCardTimer);
+  goalCardTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+const SCREENS = ['boot', 'menu', 'matchmaking', 'prematch', 'pause', 'result'];
 function showScreen(id) {
   for (const s of SCREENS) $(s).classList.toggle('hidden', s !== id);
   ui.hud.classList.toggle('hidden', !(id === null || id === 'pause'));
@@ -254,7 +298,9 @@ function syncMenu() {
   $('meta-diff').textContent = DIFFICULTY[settings.difficulty].label;
   $('meta-len').textContent = settings.minutes + ' min';
   $('meta-cam').textContent = CAMERA_INFO[settings.camera][0] + ' cam';
-  seg($('menu').querySelector('[data-quick="difficulty"] .seg'), [['amateur', 'Amateur'], ['pro', 'Pro'], ['legend', 'Legend']], () => settings.difficulty, v => { setSetting('difficulty', v); syncMenu(); });
+  const dseg = $('menu').querySelector('[data-quick="difficulty"] .seg');
+  dseg.classList.add('seg5');
+  seg(dseg, DIFF_KEYS.map(k => [k, DIFFICULTY[k].label]), () => settings.difficulty, v => { setSetting('difficulty', v); syncMenu(); });
   seg($('menu').querySelector('[data-quick="minutes"] .seg'), [[4, '4 min'], [6, '6 min'], [10, '10 min']], () => settings.minutes, v => { setSetting('minutes', v); syncMenu(); });
   $('tip-text').textContent = tip();
   const pr = SQ.profile();
@@ -307,19 +353,26 @@ function renderSquad() {
   const focus = selBench || (selSlot !== null ? pr.lineup[selSlot] : null);
   const det = $('squad-detail');
   if (!focus) {
-    det.innerHTML = `<div class="sd-empty"><b>ZorpFC · ${SQ.teamOvr()} OVR</b><span>Tap a player to see his card and train him.</span><span>Tap two players on the pitch to swap positions, or a player then a reserve to substitute.</span></div>`;
+    det.innerHTML = `<div class="sd-empty"><b>ZorpFC · ${SQ.teamOvr()} OVR</b><span>Tap a player to see his card and upgrade his attributes — pace, shooting, passing and more.</span><span>Tap two players on the pitch to swap positions, or a player then a reserve to substitute.</span></div>`;
     return;
   }
-  const p = SQ.DB[focus], lvl = SQ.level(focus), cost = SQ.trainCost(focus);
-  const maxed = lvl >= SQ.MAX_LEVEL || SQ.ovr(focus) >= 99;
-  det.innerHTML = `${card(focus)}<div class="sd-info"><h3>${p.name}</h3><div class="sub">${p.pos} · #${p.num} · ${SQ.ovr(focus)} OVR</div>
-    <div class="bars">${statRows(focus).map(([k, v]) => `<div>${k}<i style="--v:${v}%"></i><b>${v}</b></div>`).join('')}</div>
-    <div class="lv">${Array.from({ length: SQ.MAX_LEVEL }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div>
-    <button class="train-btn" id="train-btn" ${maxed || SQ.profile().coins < cost ? 'disabled' : ''}><svg class="ico"><use href="#i-bolt"/></svg>${maxed ? 'MAXED' : `TRAIN +1 <small>${coin(cost)}</small>`}</button></div>`;
-  const tb = $('train-btn');
-  if (tb) tb.addEventListener('click', () => {
-    if (SQ.train(focus)) { toast(`${p.name} trained to ${SQ.ovr(focus)} OVR`, 'bolt'); sound.kick && sound.ctx && sound.kick(0.2); renderSquad(); updateCoins(); }
-  });
+  const p = SQ.DB[focus], a = SQ.attrs(focus);
+  const keys = p.pos === 'GK' ? SQ.UPGRADABLE.gk : SQ.UPGRADABLE.field;
+  det.innerHTML = `${card(focus)}<div class="sd-info"><h3>${p.name}</h3><div class="sub">${p.pos} · #${p.num} · ${SQ.ovr(focus)} OVR${p.star ? ' · SUPERSTAR' : ''}</div>
+    <div class="attr-list">${keys.map(k => {
+      const v = a[k], lv = SQ.attrLevel(focus, k), cost = SQ.trainCost(focus, k), can = SQ.canTrain(focus, k);
+      return `<div class="attr">${SQ.ATTR_NAME[k]}<i style="--v:${v}%"><u style="--b:${v - lv}%;--u:${lv}%"></u></i><b>${v}</b>${can
+        ? `<button data-train="${k}" ${SQ.profile().coins < cost ? 'disabled' : ''}><svg class="ico"><use href="#i-coin"/></svg>${cost >= 1000 ? (cost / 1000).toFixed(1) + 'k' : cost}</button>`
+        : '<button class="max" disabled>MAX</button>'}</div>`;
+    }).join('')}</div></div>`;
+  det.querySelectorAll('[data-train]').forEach(btn => btn.addEventListener('click', () => {
+    const k = btn.dataset.train;
+    if (SQ.train(focus, k)) {
+      toast(`${p.name}: ${SQ.ATTR_NAME[k]} ${SQ.attrs(focus)[k]} · ${SQ.ovr(focus)} OVR`, 'bolt');
+      if (sound.ctx) sound.kick(0.2);
+      renderSquad(); updateCoins();
+    }
+  }));
 }
 $('pitch').addEventListener('click', e => {
   const b = e.target.closest('.slot');
@@ -374,7 +427,7 @@ $('daily-btn').addEventListener('click', () => {
 });
 setInterval(() => { if (state === 'menu') $('tip-text').textContent = tip(); }, 6000);
 
-$('play-btn').addEventListener('click', () => { if (match && state === 'menu') startPrematch(); });
+$('play-btn').addEventListener('click', () => { if (match && state === 'menu') startMatchmaking(); });
 $('menu-settings').addEventListener('click', () => openSettings());
 $('menu-controls').addEventListener('click', () => openModal('help'));
 $('fs-btn').addEventListener('click', () => {
@@ -383,6 +436,50 @@ $('fs-btn').addEventListener('click', () => {
 });
 const standalone = window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || navigator.standalone;
 if (standalone) $('install-tip').classList.add('hidden');
+
+// ---------------------------------------------------------------- matchmaking
+let mmToken = 0;
+async function startMatchmaking() {
+  const tok = ++mmToken;
+  state = 'matchmaking';
+  sound.init();
+  commentary.unlock();
+  requestFullscreen();
+  showScreen('matchmaking');
+  const mm = $('matchmaking');
+  mm.classList.remove('found');
+  $('mm-status').textContent = 'SEARCHING FOR OPPONENT';
+  $('mm-sub').textContent = `Difficulty: ${DIFFICULTY[settings.difficulty].label}`;
+  $('mm-you-ovr').textContent = `OVR ${SQ.teamOvr()}`;
+  $('mm-name').textContent = '…';
+  $('mm-ovr').innerHTML = '&nbsp;';
+  // pick an opponent (any of the big clubs, not the same one twice in a row)
+  let pick;
+  do { pick = CLUBS[(Math.random() * CLUBS.length) | 0]; } while (CLUBS.length > 1 && pick === opponent);
+  const reel = $('mm-reel');
+  let i = (Math.random() * CLUBS.length) | 0, delay = 70;
+  const t0 = performance.now();
+  while (performance.now() - t0 < 2100 || CLUBS[i] !== pick) {
+    if (tok !== mmToken || state !== 'matchmaking') return;
+    i = (i + 1) % CLUBS.length;
+    reel.innerHTML = crestSVG(CLUBS[i]);
+    reel.classList.remove('spin'); void reel.offsetWidth; reel.classList.add('spin');
+    if (sound.ctx) sound.kick(0.03);
+    await wait(delay);
+    if (performance.now() - t0 > 1500) delay = Math.min(260, delay * 1.18);
+  }
+  opponent = pick;
+  mm.classList.add('found');
+  $('mm-status').textContent = 'MATCH FOUND';
+  $('mm-name').textContent = pick.name;
+  $('mm-ovr').textContent = `OVR ${pick.ovr}`;
+  vibrate([30, 40, 30]);
+  if (sound.ctx) sound.whistle(1);
+  await wait(1300);
+  if (tok !== mmToken || state !== 'matchmaking') return;
+  startPrematch();
+}
+$('mm-cancel').addEventListener('click', () => { mmToken++; goMenu(); });
 
 // ---------------------------------------------------------------- pre-match loading (matchup screen)
 async function startPrematch() {
@@ -426,7 +523,7 @@ function startIntro() {
   showScreen(null);
   ui.controls.classList.add('hidden');
   hooks.hint('');
-  hooks.banner('ZorpFC', 'vs  Varcelona', 2600, 'home');
+  hooks.banner('ZorpFC', `vs  ${opponent.name}`, 2600, 'home');
 }
 
 function beginKickoff() {
@@ -442,7 +539,7 @@ function showResult() {
   const h = match.home.score, a = match.away.score;
   $('ft-h').textContent = h;
   $('ft-a').textContent = a;
-  $('ft-msg').textContent = h > a ? 'ZORPFC WIN!' : h < a ? 'VARCELONA WIN' : 'IT\'S A DRAW';
+  $('ft-msg').textContent = h > a ? 'ZORPFC WIN!' : h < a ? `${opponent.name.toUpperCase()} WIN` : 'IT\'S A DRAW';
   const st = match.stats;
   const total = st.home.poss + st.away.poss || 1;
   const rows = [
@@ -457,7 +554,7 @@ function showResult() {
   }).join('');
   if (!match.rewarded) {
     match.rewarded = true;
-    const r = SQ.matchRewards(h, a, settings.difficulty);
+    const r = SQ.matchRewards(h, a, settings.difficulty, opponent.ovr);
     $('ft-rewards').innerHTML = r.lines.map(([l, v]) => `<span>${l} +${v}</span>`).join('') + `<span class="total"><svg class="ico"><use href="#i-coin"/></svg>+${r.total}</span>`;
   }
   showScreen('result');
@@ -498,12 +595,12 @@ $('pause-settings').addEventListener('click', () => openSettings());
 $('pause-controls').addEventListener('click', () => openModal('help'));
 $('restart-btn').addEventListener('click', () => { closeModals(); startPrematch(); });
 $('quit-btn').addEventListener('click', () => { closeModals(); goMenu(); });
-$('again-btn').addEventListener('click', () => startPrematch());
+$('again-btn').addEventListener('click', () => startMatchmaking());
 $('menu-btn').addEventListener('click', () => goMenu());
 
 // ---------------------------------------------------------------- settings panel (built from a schema)
 const SCHEMA = [
-  { tab: 'Gameplay', key: 'difficulty', label: 'Difficulty', type: 'seg', options: [['amateur', 'Amateur'], ['pro', 'Pro'], ['legend', 'Legend']] },
+  { tab: 'Gameplay', key: 'difficulty', label: 'Difficulty', type: 'seg', options: DIFF_KEYS.map(k => [k, DIFFICULTY[k].label]) },
   { tab: 'Gameplay', key: 'minutes', label: 'Match length', desc: 'Applies to the next match', type: 'seg', options: [[4, '4 min'], [6, '6 min'], [10, '10 min']] },
   { tab: 'Gameplay', key: 'passAssist', label: 'Pass assist', desc: 'Passes go to who you aim at and follow him', type: 'toggle' },
   { tab: 'Gameplay', key: 'autoSwitch', label: 'Auto switch', desc: 'Control the closest defender automatically', type: 'toggle' },
@@ -531,7 +628,7 @@ function setSetting(key, v) {
 
 function applySetting(key) {
   switch (key) {
-    case 'difficulty': if (match) match.diff = DIFFICULTY[settings.difficulty]; break;
+    case 'difficulty': if (match) match.diff = effDiff(); break;
     case 'volume': case 'crowd': case 'sound': applyAudio(); break;
     case 'commentary': commentary.enabled = settings.commentary; if (!settings.commentary) commentary.stop(); break;
     case 'graphics': if (state === 'menu' || state === 'title') { applyGraphics(); newMatch(); } break;
@@ -772,6 +869,7 @@ function updateHUD(dt) {
   const mm = Math.floor(m), ss = Math.floor((m - mm) * 60);
   ui.clock.textContent = String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
 
+  ui.controls.classList.toggle('celebrating', match.phase === 'goal');
   const mode = match.uiMode();
   if (mode !== lastMode) {
     lastMode = mode;
@@ -793,6 +891,7 @@ function updateHUD(dt) {
     ui.power.style.top = ((1 - projV.y) / 2 * window.innerHeight) + 'px';
     ui.powerFill.style.width = Math.round(c.charge * 100) + '%';
     ui.power.classList.toggle('chip', !!c.chipping);
+    if (c.shotKind && c.shotKind !== 'normal') ui.power.dataset.kind = c.shotKind; else delete ui.power.dataset.kind;
   } else ui.power.style.display = 'none';
 
   if (settings.radar) drawRadar();

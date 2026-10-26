@@ -78,18 +78,27 @@ export function profile() {
 }
 export function save() { try { localStorage.setItem(KEY, JSON.stringify(prof)); } catch (_) { /* private mode */ } }
 
-export const level = id => profile().upgrades[id] || 0;
+// upgrades[id] = { pac: n, sho: n, ... } — each attribute trains separately, up to +MAX_LEVEL
 export const MAX_LEVEL = 10;
-
+export const UPGRADABLE = { field: ['pac', 'sho', 'pas', 'dri', 'def', 'phy'], gk: ['gk', 'pas', 'pac', 'phy'] };
+export const ATTR_NAME = { pac: 'Pace', sho: 'Shooting', pas: 'Passing', dri: 'Dribbling', def: 'Defending', phy: 'Physical', gk: 'Goalkeeping' };
+function ups(id) {
+  const pr = profile();
+  let u = pr.upgrades[id];
+  if (typeof u === 'number') { const n = u; u = {}; for (const k of ['pac', 'sho', 'pas', 'dri', 'def', 'phy', 'gk']) u[k] = n; pr.upgrades[id] = u; }
+  return u || {};
+}
+export const attrLevel = (id, k) => ups(id)[k] || 0;
+export const level = id => Object.values(ups(id)).reduce((a, b) => a + b, 0);
 export function attrs(id) {
-  const p = DB[id], l = level(id);
+  const p = DB[id], u = ups(id);
   const out = {};
-  for (const k in p.a) out[k] = Math.min(99, p.a[k] + l);
+  for (const k in p.a) out[k] = Math.min(99, p.a[k] + (u[k] || 0));
   return out;
 }
 export function ovr(id) {
   const p = DB[id], a = attrs(id);
-  if (p.base) return Math.min(99, p.base + level(id));
+  if (p.base) return p.base;
   let v = 0;
   for (const [k, w] of Object.entries(WEIGHTS[p.pos])) v += a[k] * w;
   return Math.min(99, Math.round(v + 2));
@@ -107,7 +116,7 @@ export const teamOvr = () => Math.round(profile().lineup.reduce((s, id) => s + o
 export function lineupForMatch() {
   return profile().lineup.map(id => {
     const p = DB[id], a = attrs(id);
-    return { name: p.name, num: p.num, skin: p.skin, hair: p.hair, style: p.style, st: { spd: a.pac / 100, pas: a.pas / 100, sho: a.sho / 100, dri: a.dri / 100, def: a.def / 100, gk: a.gk / 100 } };
+    return { name: p.name, num: p.num, skin: p.skin, hair: p.hair, style: p.style, st: { spd: a.pac / 100, pas: a.pas / 100, sho: a.sho / 100, dri: a.dri / 100, def: a.def / 100, gk: a.gk / 100, phy: a.phy / 100 }, id };
   });
 }
 
@@ -124,13 +133,19 @@ export function swap(slotA, idOrSlotB) {
   return true;
 }
 
-export const trainCost = id => Math.round(ovr(id) * 14 * (1 + level(id) * 0.6) / 50) * 50;
-export function train(id) {
+export const trainCost = (id, k) => {
+  const v = attrs(id)[k];
+  return Math.round((220 + Math.max(0, v - 50) * 24 + attrLevel(id, k) * 90) / 50) * 50;
+};
+export function canTrain(id, k) { return attrLevel(id, k) < MAX_LEVEL && attrs(id)[k] < 99; }
+export function train(id, k) {
   const pr = profile();
-  const cost = trainCost(id);
-  if (level(id) >= MAX_LEVEL || ovr(id) >= 99 || pr.coins < cost) return false;
+  const cost = trainCost(id, k);
+  if (!canTrain(id, k) || pr.coins < cost) return false;
   pr.coins -= cost;
-  pr.upgrades[id] = level(id) + 1;
+  const u = ups(id);
+  u[k] = (u[k] || 0) + 1;
+  pr.upgrades[id] = u;
   save();
   return true;
 }
@@ -156,14 +171,15 @@ export function claimDaily() {
 }
 
 // coins for a finished match
-export function matchRewards(home, away, difficulty) {
+export function matchRewards(home, away, difficulty, oppOvr = 84) {
   const pr = profile();
-  const mult = { amateur: 0.8, pro: 1, legend: 1.5 }[difficulty] || 1;
+  const mult = { beginner: 0.6, amateur: 0.8, pro: 1, elite: 1.3, legend: 1.7 }[difficulty] || 1;
   const lines = [];
   const res = home > away ? 'w' : home < away ? 'l' : 'd';
   lines.push([res === 'w' ? 'Win' : res === 'd' ? 'Draw' : 'Played', res === 'w' ? 400 : res === 'd' ? 200 : 100]);
   if (home) lines.push([`Goals (${home})`, home * 60]);
   if (!away) lines.push(['Clean sheet', 100]);
+  if (res === 'w' && oppOvr >= 86) lines.push(['Big-club win', 150]);
   let total = 0;
   for (const l of lines) { l[1] = Math.round(l[1] * mult); total += l[1]; }
   pr.coins += total;

@@ -8,7 +8,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Superball 27">
-  <meta name="description" content="Superball 27 – 3D mobile football. ZorpFC vs Varcelona.">
+  <meta name="description" content="Superball 27 – 3D mobile football by Ontronop Games.">
   <title>Superball 27</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -99,12 +99,12 @@
       <button class="tile tile-hero" id="play-btn">
         <div class="hero-art"></div>
         <div class="hero-shade"></div>
-        <div class="tile-tag"><i></i>QUICK MATCH · VS BOTS</div>
-        <div class="tile-title">KICK OFF</div>
+        <div class="tile-tag"><i></i>ONLINE-STYLE MATCHMAKING · VS AI CLUBS</div>
+        <div class="tile-title">FIND MATCH</div>
         <div class="matchup">
           <div class="mu-team"><div class="crest crest-home"><span>Z</span></div><b>ZorpFC</b></div>
           <div class="mu-vs">VS</div>
-          <div class="mu-team"><div class="crest crest-away"><span>V</span></div><b>Varcelona</b></div>
+          <div class="mu-team"><div class="crest crest-q"><span>?</span></div><b>11 top clubs</b></div>
         </div>
         <div class="tile-meta"><span id="meta-diff">Pro</span><span id="meta-len">6 min</span><span id="meta-cam">Broadcast</span></div>
         <div class="play-fab"><svg class="ico"><use href="#i-play"/></svg></div>
@@ -146,15 +146,27 @@
     <div class="toast" id="toast"></div>
   </div>
 
+  <!-- ============ MATCHMAKING ============ -->
+  <div id="matchmaking" class="screen hidden">
+    <div class="mm-bg"></div>
+    <div class="mm-head"><span class="mm-dot"></span><b id="mm-status">SEARCHING FOR OPPONENT</b><small id="mm-sub">Difficulty: Pro</small></div>
+    <div class="mm-stage">
+      <div class="mm-side mm-you"><div class="crest crest-home big"><span>Z</span></div><b>ZorpFC</b><small id="mm-you-ovr">OVR 85</small></div>
+      <div class="mm-vs">VS</div>
+      <div class="mm-side mm-them"><div class="mm-reel" id="mm-reel"></div><b id="mm-name">…</b><small id="mm-ovr">&nbsp;</small></div>
+    </div>
+    <button class="mbtn mm-cancel" id="mm-cancel">Cancel</button>
+  </div>
+
   <!-- ============ PRE-MATCH LOADING ============ -->
   <div id="prematch" class="screen hidden">
     <div class="pm-art"></div>
     <div class="pm-shade"></div>
     <div class="pm-head"><span>SUPERBALL 27</span><b>QUICK MATCH</b></div>
     <div class="pm-teams">
-      <div class="pm-team pm-home"><div class="crest crest-home big"><span>Z</span></div><div class="pm-name">ZorpFC</div><div class="pm-sub">HOME</div></div>
+      <div class="pm-team pm-home"><div class="crest crest-home big"><span>Z</span></div><div class="pm-name">ZorpFC</div><div class="pm-sub" id="pm-home-sub">HOME</div></div>
       <div class="pm-vs"><b>VS</b><small>SUPERBALL ARENA · 20:45</small></div>
-      <div class="pm-team pm-away"><div class="crest crest-away big"><span>V</span></div><div class="pm-name">Varcelona</div><div class="pm-sub">AWAY</div></div>
+      <div class="pm-team pm-away"><div class="crest-slot big" id="pm-away-crest"></div><div class="pm-name" id="pm-away-name">Opponent</div><div class="pm-sub" id="pm-away-sub">AWAY</div></div>
     </div>
     <div class="pm-foot">
       <div class="pm-tip" id="pm-tip"></div>
@@ -168,7 +180,7 @@
     <div id="scorebar">
       <div class="sb-team sb-home"><i></i>ZFC</div>
       <div class="sb-score"><span id="sc-h">0</span><b></b><span id="sc-a">0</span></div>
-      <div class="sb-team sb-away">VAR<i></i></div>
+      <div class="sb-team sb-away"><span id="sb-away-name">AWY</span><i id="sb-away-col"></i></div>
       <div id="clock">00:00</div>
     </div>
     <button id="pause-btn" aria-label="Pause"><span></span><span></span></button>
@@ -178,6 +190,7 @@
     <div id="banner"><div class="b1"></div><div class="b2"></div></div>
     <div id="event"></div>
     <div id="hint"></div>
+    <div id="goal-card"></div>
     <div id="replay-badge"><i></i>REPLAY<small>tap to skip</small></div>
     <div id="fps"></div>
   </div>
@@ -189,7 +202,7 @@
     <div id="buttons">
       <button class="btn b-sprint" data-btn="sprint"><span>SPRINT</span></button>
       <button class="btn b-pass" data-btn="pass"><i class="flick"><svg class="ico"><use href="#i-up"/></svg>HIGH</i><span>PASS</span></button>
-      <button class="btn b-shoot" data-btn="shoot"><i class="flick"><svg class="ico"><use href="#i-up"/></svg>CHIP</i><span>SHOOT</span></button>
+      <button class="btn b-shoot" data-btn="shoot"><svg class="sk sk-u"><use href="#i-up"/></svg><svg class="sk sk-d"><use href="#i-down"/></svg><svg class="sk sk-l"><use href="#i-left"/></svg><svg class="sk sk-r"><use href="#i-right"/></svg><span>SHOOT</span><i class="shot-tag"></i></button>
       <button class="btn b-through" data-btn="through"><i class="flick"><svg class="ico"><use href="#i-up"/></svg>LOB</i><span>THROUGH</span></button>
       <button class="btn b-skill" data-btn="skill"><svg class="sk sk-u"><use href="#i-up"/></svg><svg class="sk sk-d"><use href="#i-down"/></svg><svg class="sk sk-l"><use href="#i-left"/></svg><svg class="sk sk-r"><use href="#i-right"/></svg><span>SKILL</span></button>
     </div>
@@ -200,7 +213,7 @@
     <div class="pause-panel">
       <div class="pp-head">
         <h2>PAUSED</h2>
-        <div class="pp-score"><span class="pp-h">ZFC</span><b id="pp-score">0 - 0</b><span class="pp-a">VAR</span><small id="pp-time">00:00</small></div>
+        <div class="pp-score"><span class="pp-h">ZFC</span><b id="pp-score">0 - 0</b><span class="pp-a" id="pp-a">AWY</span><small id="pp-time">00:00</small></div>
       </div>
       <button class="mbtn primary" id="resume-btn"><svg class="ico"><use href="#i-play"/></svg>Resume</button>
       <div class="pp-label">Camera</div>
@@ -233,11 +246,11 @@
         <div class="hg"><h4>Move</h4><p>Left thumb anywhere on the left side. Push to the edge to sprint, or hold <b>SPRINT</b>.</p></div>
         <div class="hg"><h4>Pass</h4><p><b>Tap</b> = low pass to the player you aim at. <b>Flick up</b> = high pass.</p></div>
         <div class="hg"><h4>Through</h4><p><b>Tap</b> = ball into space. <b>Flick up</b> = lobbed over the defence.</p></div>
-        <div class="hg"><h4>Shoot</h4><p><b>Hold</b> for power, release for a driven shot. <b>Flick up</b> while holding = chip.</p></div>
+        <div class="hg"><h4>Shoot</h4><p><b>Hold</b> for power and release. While holding, swipe <svg class="ico in"><use href="#i-up"/></svg> chip · <svg class="ico in"><use href="#i-down"/></svg> low driven (aim with the joystick) · <svg class="ico in"><use href="#i-right"/></svg> power shot · <svg class="ico in"><use href="#i-left"/></svg> fake shot.</p></div>
         <div class="hg"><h4>Skill</h4><p><b>Tap</b> step-over · <b><svg class="ico in"><use href="#i-left"/></svg><svg class="ico in"><use href="#i-right"/></svg></b> La Croqueta · <b><svg class="ico in"><use href="#i-up"/></svg></b> rainbow flick · <b><svg class="ico in"><use href="#i-down"/></svg></b> drag-back.</p></div>
         <div class="hg"><h4>Defend</h4><p><b>SWITCH</b> player · <b>TACKLE</b> · hold <b>PRESS</b> to chase · <b>SLIDE</b> tackle · hold <b>SPRINT</b> to shadow the ball carrier.</p></div>
         <div class="hg"><h4>One-touch</h4><p>Press PASS or SHOOT while a pass is coming to you to play it first time.</p></div>
-        <div class="hg"><h4>Keyboard</h4><p>WASD · Space/U pass · K/O shoot · L/Y through · Shift sprint · E skill · P pause.</p></div>
+        <div class="hg"><h4>Keyboard</h4><p>WASD · Space/U pass · K shoot (O chip · N low · M power · B fake) · L/Y through · Shift sprint · E skill · P pause.</p></div>
       </div>
     </div>
   </div>
@@ -249,7 +262,7 @@
       <div class="final">
         <div class="ft-team"><div class="crest crest-home"><span>Z</span></div>ZorpFC</div>
         <div class="ft-score"><span id="ft-h">0</span><i></i><span id="ft-a">0</span></div>
-        <div class="ft-team"><div class="crest crest-away"><span>V</span></div>Varcelona</div>
+        <div class="ft-team"><div class="crest-slot" id="ft-away-crest"></div><span id="ft-away-name">Opponent</span></div>
       </div>
       <div id="ft-msg"></div>
       <div id="ft-stats"></div>

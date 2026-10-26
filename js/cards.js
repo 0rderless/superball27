@@ -32,18 +32,29 @@ export function avatar(p, shirt = '#1557ff', trim = '#ffffff') {
   </svg>`;
 }
 
-const STAT_ROWS = p => p.pos === 'GK'
-  ? a => [['DIV', a.gk], ['HAN', Math.max(1, a.gk - 3)], ['KIC', a.pas], ['REF', Math.min(99, a.gk + 2)], ['SPD', a.pac], ['POS', Math.max(1, a.gk - 1)]]
-  : a => [['PAC', a.pac], ['SHO', a.sho], ['PAS', a.pas], ['DRI', a.dri], ['DEF', a.def], ['PHY', a.phy]];
+const rowsFor = (pos, a) => pos === 'GK'
+  ? [['DIV', a.gk], ['HAN', Math.max(1, a.gk - 3)], ['KIC', a.pas], ['REF', Math.min(99, a.gk + 2)], ['SPD', a.pac], ['POS', Math.max(1, a.gk - 1)]]
+  : [['PAC', a.pac], ['SHO', a.sho], ['PAS', a.pas], ['DRI', a.dri], ['DEF', a.def], ['PHY', a.phy]];
 
-export function statRows(id) { return STAT_ROWS(DB[id])(attrs(id)); }
+export function statRows(id) { return rowsFor(DB[id].pos, attrs(id)); }
 
-export function card(id, { mini = false } = {}) {
-  const p = DB[id];
-  const name = mini ? p.name.split(' ').slice(-1)[0] : p.name;
-  const stats = mini ? '' : `<div class="pc-stats">${statRows(id).map(([k, v]) => `<span><b>${v}</b><i>${k}</i></span>`).join('')}</div>`;
-  return `<div class="pcard t-${tier(id)}${mini ? ' mini' : ''}" data-id="${id}">
-    <div class="pc-top"><div class="pc-ovr"><b>${ovr(id)}</b><small>${p.pos}</small></div><div class="pc-face">${avatar(p)}</div><div class="pc-num">${p.num}</div></div>
+// v: { name, pos, num, ovr, tier, rows, look:{skin,hair,style}, shirt, trim }
+export function cardView(v, { mini = false } = {}) {
+  const name = mini ? v.name.split(' ').slice(-1)[0] : v.name;
+  const stats = mini ? '' : `<div class="pc-stats">${v.rows.map(([k, val]) => `<span><b>${val}</b><i>${k}</i></span>`).join('')}</div>`;
+  return `<div class="pcard t-${v.tier}${mini ? ' mini' : ''}">
+    <div class="pc-top"><div class="pc-ovr"><b>${v.ovr}</b><small>${v.pos}</small></div><div class="pc-face">${avatar(v.look, v.shirt, v.trim)}</div><div class="pc-num">${v.num}</div></div>
     <div class="pc-name">${name}</div>${stats}
   </div>`;
+}
+
+export function card(id, opts) {
+  const p = DB[id];
+  return cardView({ name: p.name, pos: p.pos, num: p.num, ovr: ovr(id), tier: tier(id), rows: statRows(id), look: p }, opts);
+}
+
+// card for an opponent (club squad player)
+export function clubCard(pl, kit, opts) {
+  const t = pl.ovr >= 88 ? 'rare' : pl.ovr >= 75 ? 'gold' : pl.ovr >= 65 ? 'silver' : 'bronze';
+  return cardView({ name: pl.name, pos: pl.pos, num: pl.num, ovr: pl.ovr, tier: t, rows: rowsFor(pl.pos, pl.a), look: pl, shirt: kit.shirt, trim: kit.trim }, opts);
 }

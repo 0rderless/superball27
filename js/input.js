@@ -73,7 +73,7 @@ export class Input {
         this.touchMode = true;
         el.setPointerCapture(e.pointerId);
         ids.add(e.pointerId);
-        if (!st.down) { st.down = true; st.pressed = true; st.held = 0; st.flick = false; st.fired = false; st.sx = e.clientX; st.sy = e.clientY; }
+        if (!st.down) { st.down = true; st.pressed = true; st.held = 0; st.flick = false; st.flickDir = null; st.fired = false; st.sx = e.clientX; st.sy = e.clientY; delete el.dataset.shot; }
         el.classList.add('down');
         if (this.vibrate && navigator.vibrate) try { navigator.vibrate(8); } catch (_) { /* ignore */ }
       });
@@ -90,8 +90,19 @@ export class Input {
           st.fire = true; st.fireType = dir; st.fired = true;
           return;
         }
+        if (k === 'shoot' && Math.hypot(dx, dy) > 22) {
+          // shoot button: swipe picks the shot — up chip, down low driven, right power, left fake
+          const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+          st.flick = true; st.flickDir = dir;
+          el.classList.add('flicked');
+          el.dataset.shot = dir;
+          setTimeout(() => el.classList.remove('flicked'), 350);
+          if (this.vibrate && navigator.vibrate) try { navigator.vibrate(15); } catch (_) { /* ignore */ }
+          if (dir === 'left') { st.fire = true; st.fireType = 'left'; st.fired = true; } // fake shot fires at once
+          return;
+        }
         if (dy < -22 && -dy > Math.abs(dx) * 0.8) {
-          // flick up: high pass / lob through / chip shot
+          // flick up: high pass / lob through
           st.flick = true;
           el.classList.add('flicked');
           setTimeout(() => el.classList.remove('flicked'), 350);
@@ -103,8 +114,8 @@ export class Input {
         if (!ids.has(e.pointerId)) return;
         ids.delete(e.pointerId);
         if (ids.size === 0 && st.down) {
-          st.down = false; st.released = true; el.classList.remove('down');
-          if (!st.fired) { st.fire = true; st.fireType = st.flick ? 'up' : 'tap'; st.fired = true; }
+          st.down = false; st.released = true; el.classList.remove('down'); delete el.dataset.shot;
+          if (!st.fired) { st.fire = true; st.fireType = st.flickDir || 'tap'; st.fired = true; }
         }
       };
       el.addEventListener('pointerup', up);
@@ -114,7 +125,7 @@ export class Input {
 
     // U = high pass, Y = lofted through ball, O = chip shot (hold for power)
     const map = {
-      Space: 'pass', KeyJ: 'pass', KeyU: 'pass', KeyK: 'shoot', KeyO: 'shoot', KeyL: 'through', KeyY: 'through',
+      Space: 'pass', KeyJ: 'pass', KeyU: 'pass', KeyK: 'shoot', KeyO: 'shoot', KeyN: 'shoot', KeyM: 'shoot', KeyB: 'shoot', KeyL: 'through', KeyY: 'through',
       ShiftLeft: 'sprint', ShiftRight: 'sprint', KeyI: 'skill', KeyE: 'skill',
     };
     const highKeys = new Set(['KeyU', 'KeyO', 'KeyY']);
@@ -127,8 +138,9 @@ export class Input {
         const st = this.b[k];
         if (!st.down) {
           st.down = true; st.pressed = true; st.held = 0;
-          st.flick = highKeys.has(e.code);
-          st.fire = true; st.fireType = st.flick ? 'up' : 'tap'; st.fired = true;
+          st.flick = highKeys.has(e.code) || ['KeyN', 'KeyM', 'KeyB'].includes(e.code);
+          st.flickDir = { KeyO: 'up', KeyN: 'down', KeyM: 'right', KeyB: 'left' }[e.code] || (st.flick ? 'up' : null);
+          st.fire = true; st.fireType = st.flickDir || 'tap'; st.fired = true;
         }
       }
     });

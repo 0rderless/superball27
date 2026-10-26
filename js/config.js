@@ -17,10 +17,13 @@ export const BALL_R = 0.11;
 export const GRAVITY = 9.81;
 
 export const DIFFICULTY = {
-  amateur: { label: 'Amateur', react: 0.40, tackle: 0.55, passErr: 0.10, speed: 0.90, gk: 0.55, think: 0.60, press: 0.75, shootErr: 1.35 },
-  pro:     { label: 'Pro',     react: 0.27, tackle: 0.85, passErr: 0.06, speed: 0.97, gk: 0.70, think: 0.40, press: 0.92, shootErr: 1.0 },
-  legend:  { label: 'Legend',  react: 0.16, tackle: 1.15, passErr: 0.03, speed: 1.03, gk: 0.84, think: 0.24, press: 1.06, shootErr: 0.75 },
+  beginner: { label: 'Beginner', react: 0.55, tackle: 0.35, passErr: 0.14, speed: 0.85, gk: 0.45, think: 0.8, press: 0.6, shootErr: 1.6, reward: 0.6 },
+  amateur:  { label: 'Amateur',  react: 0.40, tackle: 0.55, passErr: 0.10, speed: 0.90, gk: 0.55, think: 0.60, press: 0.75, shootErr: 1.35, reward: 0.8 },
+  pro:      { label: 'Pro',      react: 0.27, tackle: 0.85, passErr: 0.06, speed: 0.97, gk: 0.70, think: 0.40, press: 0.92, shootErr: 1.0, reward: 1 },
+  elite:    { label: 'Elite',    react: 0.18, tackle: 1.12, passErr: 0.035, speed: 1.03, gk: 0.82, think: 0.26, press: 1.05, shootErr: 0.78, reward: 1.3 },
+  legend:   { label: 'Legend',   react: 0.11, tackle: 1.4, passErr: 0.02, speed: 1.08, gk: 0.9, think: 0.17, press: 1.18, shootErr: 0.6, reward: 1.7 },
 };
+export const DIFF_KEYS = ['beginner', 'amateur', 'pro', 'elite', 'legend'];
 
 // 4-3-3. a = 0 own goal line .. 1 opponent goal line, c = -1 left .. +1 right (facing attack).
 export const FORMATION = [
@@ -68,24 +71,6 @@ export const TEAMS = {
       { name: 'Lindqvist', num: 7,  skin: 0, hair: 4, style: 4, st: s(0.91, 0.79, 0.81, 0.88, 0.36) },
     ],
   },
-  away: {
-    name: 'Varcelona',
-    short: 'VAR',
-    color: '#e0202a',
-    kit: { shirt: '#d8141e', shirt2: '#8e0a12', trim: '#ffd23f', shorts: '#8e0a12', socks: '#d8141e', sockTop: '#ffd23f', boots: '#ffffff', number: '#ffd23f', pattern: 'stripes' },
-    gkKit: { shirt: '#f2c40c', shirt2: '#9a7a00', trim: '#222222', shorts: '#222222', socks: '#f2c40c', sockTop: '#222222', boots: '#ff4b1f', number: '#222222', gloves: '#ff4b1f', pattern: 'plain', longSleeve: true },
-    players: [
-      { name: 'Albareda',  num: 1,  skin: 1, hair: 1, style: 0, st: s(0.55, 0.60, 0.30, 0.40, 0.50, 0.80) },
-      { name: 'Ribalta',   num: 3,  skin: 2, hair: 0, style: 0, st: s(0.83, 0.70, 0.44, 0.68, 0.75) },
-      { name: 'Casals',    num: 4,  skin: 1, hair: 1, style: 4, st: s(0.68, 0.64, 0.40, 0.52, 0.86) },
-      { name: 'Montserrat',num: 5,  skin: 3, hair: 5, style: 1, st: s(0.72, 0.62, 0.42, 0.50, 0.85) },
-      { name: 'Puyana',    num: 2,  skin: 2, hair: 0, style: 2, st: s(0.85, 0.72, 0.46, 0.72, 0.73) },
-      { name: 'Esteve',    num: 8,  skin: 1, hair: 2, style: 0, st: s(0.72, 0.90, 0.70, 0.86, 0.60) },
-      { name: 'Navarro',   num: 16, skin: 0, hair: 1, style: 2, st: s(0.74, 0.86, 0.58, 0.80, 0.76) },
-      { name: 'Ferrer',    num: 6,  skin: 1, hair: 0, style: 0, st: s(0.76, 0.88, 0.72, 0.84, 0.55) },
-      { name: 'Rovira',    num: 11, skin: 4, hair: 5, style: 3, st: s(0.94, 0.74, 0.76, 0.91, 0.33) },
-      { name: 'Baltasar',  num: 9,  skin: 2, hair: 0, style: 1, st: s(0.84, 0.72, 0.91, 0.84, 0.40) },
-      { name: 'Quintana',  num: 7,  skin: 3, hair: 0, style: 2, st: s(0.92, 0.80, 0.80, 0.89, 0.35) },
-    ],
-  },
+  // opponent is chosen by matchmaking (see clubs.js) and set before each match
+  away: null,
 };

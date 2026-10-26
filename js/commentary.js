@@ -2,10 +2,10 @@
 const pick = a => a[(Math.random() * a.length) | 0];
 
 const LINES = {
-  kickoff: ['And we are under way here at Superball Stadium!', 'ZorpFC against Varcelona, the referee gets us started.', 'Kick off! Big atmosphere tonight.'],
+  kickoff: ['And we are under way here at Superball Stadium!', 'ZorpFC against {t}, the referee gets us started.', 'Kick off! Big atmosphere tonight.'],
   secondHalf: ['The second half is under way.', 'Here we go again, forty five minutes to play.'],
   goalHome: ['GOAL! {n} scores for ZorpFC!', 'What a finish from {n}! ZorpFC score!', 'It\'s in! {n}! The home fans go wild!', 'GOAL! Unstoppable from {n}!'],
-  goalAway: ['Varcelona score. {n} finds the net.', 'Oh no, {n} puts Varcelona ahead of the game there.', 'Goal for Varcelona, {n} with the finish.'],
+  goalAway: ['{t} score. {n} finds the net.', 'Oh no, {n} scores for {t}.', 'Goal for {t}, {n} with the finish.'],
   ownGoal: ['Oh dear, that is an own goal!', 'Disaster! It goes in off a defender!'],
   save: ['Great save!', 'What a stop from the keeper!', 'Denied! Brilliant goalkeeping.', 'The keeper gets down well to that one.'],
   catch: ['Comfortable for the keeper.', 'Straight into the gloves.', 'The goalkeeper gathers it.'],
@@ -18,7 +18,7 @@ const LINES = {
   corner: ['Corner kick.', 'It\'s a corner.'],
   halfTime: ['That\'s half time. {s}.', 'The referee blows for half time. {s}.'],
   fullTimeWin: ['Full time! ZorpFC win it! {s}.', 'It\'s all over, and ZorpFC take the victory!'],
-  fullTimeLose: ['Full time. Varcelona take the win. {s}.', 'It\'s over, and it\'s Varcelona\'s night.'],
+  fullTimeLose: ['Full time. {t} take the win. {s}.', 'It\'s over, and it\'s {t}\'s night.'],
   fullTimeDraw: ['Full time, and the points are shared. {s}.', 'All square at the final whistle.'],
   replay: ['Let\'s see that again.', 'Here\'s the replay.', 'Take another look at this.'],
   pressure: ['ZorpFC are knocking on the door.', 'The pressure is building now.'],

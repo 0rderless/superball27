@@ -441,6 +441,14 @@ export function animateModel(m, a, time, dt) {
     rot(m, 'lowerarm_l', 'x', -0.3 * w); rot(m, 'lowerarm_r', 'x', -0.3 * w);
     rot(m, 'thigh_l', 'x', -0.3 * w); rot(m, 'calf_l', 'x', 0.5 * w); rot(m, 'calf_r', 'x', 0.7 * w);
   }
+  if (a.touchT >= 0 && a.kickT < 0 && a.skillT < 0) {
+    // dribble touch: quick flick of the right foot (outside/inside for a turn)
+    const b2 = bell(a.touchT), sd = a.touchSide || 0;
+    rot(m, 'thigh_r', 'x', -0.35 * b2);
+    rot(m, 'calf_r', 'x', 0.25 * b2);
+    rot(m, 'thigh_r', 'z', sd * 0.3 * b2);
+    rot(m, 'foot_r', 'y', sd * 0.4 * b2);
+  }
   if (a.skillT >= 0) skillPose(m, a);
   if (a.hold) blendPose(m, A.poses.hold, 0.9);
   if (a.throwReady) blendPose(m, A.poses.throw, 0.9);
@@ -486,6 +494,15 @@ function skillPose(m, a) {
       body.rotation.z += (recv === 'r' ? 1 : -1) * 0.2 * B(u);
       body.position.y += 0.05 * B(u * 2 % 1);
       rot(m, 'upperarm_l', 'z', 0.5 * B(u)); rot(m, 'upperarm_r', 'z', -0.5 * B(u));
+      break;
+    }
+    case 'fake': { // fake shot: big back-lift, swing stops short, ball dragged across the standing foot
+      const back = u < 0.36 ? E(u / 0.36) : 1 - E((u - 0.36) / 0.22);
+      T('r', 0.85 * back - 0.25 * B((u - 0.45) / 0.4), -0.35 * B((u - 0.45) / 0.45) * (s > 0 ? -1 : 1), 1.35 * back + 0.3 * B((u - 0.45) / 0.4), 0);
+      T('l', -0.12 * B(u), 0, 0.3 * B(u), 0);
+      rot(m, 'upperarm_l', 'z', 0.8 * B(u / 0.7)); rot(m, 'upperarm_r', 'z', -0.5 * B(u / 0.7));
+      rot(m, 'spine_02', 'y', -0.3 * back);
+      body.rotation.z += (s > 0 ? 1 : -1) * 0.18 * B((u - 0.4) / 0.6);
       break;
     }
     case 'down': { // drag-back: sole on the ball, roll it back, spin
