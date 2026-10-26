@@ -76,9 +76,10 @@ const r = await page.evaluate(src => {
 }, isolateSnippet);
 
 const res = [];
-check(res, 'jog: ball rolls out to ~0.6m and back to the foot', r.jog.lo >= 0.15 && r.jog.hi >= 0.4 && r.jog.hi <= 0.8 && r.jog.kept, r.jog);
+// dribble assist (default): FC Mobile-style, the ball stays on the ring around his feet
+check(res, 'jog: ball stays on the ring ahead (0.35–0.7m)', r.jog.lo >= 0.35 && r.jog.hi <= 0.7 && r.jog.kept, r.jog);
 check(res, 'jog: every touch on a footfall', r.jog.touches > 0 && r.jog.offStrike === 0, r.jog);
-check(res, 'sprint: ball pushed out to ~1m and back', r.sprint.lo >= 0.15 && r.sprint.hi >= 0.7 && r.sprint.hi <= 1.3 && r.sprint.kept, r.sprint);
+check(res, 'sprint: ball a little further out on the ring (0.45–0.9m)', r.sprint.lo >= 0.45 && r.sprint.hi <= 0.9 && r.sprint.kept, r.sprint);
 check(res, 'sprint: every touch on a footfall', r.sprint.touches > 0 && r.sprint.offStrike === 0, r.sprint);
 check(res, 'random stick 3×10s: never lost alone', r.random.lost === 0, { ...r.random, to: r.lostTo });
 check(res, 'gentle steer: ball follows the run within 0.35s (≤ 0.2 rad off), stays ≤ 0.9m', r.steer.ballVsRun <= 0.2 && r.steer.d <= 0.9, r.steer);

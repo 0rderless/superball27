@@ -1315,6 +1315,34 @@ export class Match {
     }
     let ahead = relX * hx + relZ * hz, side = relX * rx + relZ * rz;
     const bAng = Math.atan2(side, ahead); // 0 = straight ahead of his run
+    // FC Mobile-style close control (dribble assist, your team): the ball lives on the ring around
+    // his feet, on the side he's heading, swings round the ring when he changes direction and
+    // gets a small nudge on every footfall. It never rolls away from him.
+    if (o.team.isUser && this.settings.dribAssist !== false) {
+      if (D.ringA === undefined) { D.ringA = Math.atan2(relX, relZ); D.pulse = 0; }
+      const moving = dsp > 0.4;
+      const wantA = moving ? Math.atan2(ux, uz) : Math.atan2(o.fwd.x, o.fwd.z);
+      const rate = (9 + 6 * ctrl) * dt;
+      D.ringA += clamp(wrap(wantA - D.ringA), -rate, rate);
+      const run = clamp(sp / 8.5, 0, 1);
+      const strike = o.a.strike;
+      if (strike && moving) {
+        D.pulse = (0.07 + 0.15 * run) * (1.15 - 0.3 * ctrl);
+        D.lastTouchT = this.time; o.a.touchT = 0; o.a.touchFoot = strike;
+        o.a.touchSide = Math.sign(wrap(wantA - Math.atan2(hx, hz))) * (Math.abs(wrap(wantA - Math.atan2(hx, hz))) > 0.4 ? 1 : 0);
+      }
+      D.pulse *= Math.exp(-dt * 7);
+      const R = (moving ? 0.34 + 0.2 * run : 0.3) + D.pulse;
+      const tx = o.pos.x + Math.sin(D.ringA) * R, tz = o.pos.z + Math.cos(D.ringA) * R;
+      // carried along with him, eased onto its spot on the ring
+      const k = 1 - Math.exp(-dt * 16);
+      const cx = b.x + o.vel.x * dt, cz = b.z + o.vel.z * dt;
+      const nx = cx + (tx - cx) * k, nz = cz + (tz - cz) * k;
+      D.v.set((nx - b.x) / dt, 0, (nz - b.z) / dt);
+      b.x = nx; b.z = nz; b.y = BALL_R;
+      ball.vel.copy(D.v);
+      return;
+    }
     if (D.plant > 0) {
       // sole on the ball while he stops: it stays under the planted foot
       D.plant -= dt;
