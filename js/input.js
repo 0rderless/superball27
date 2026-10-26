@@ -11,6 +11,8 @@ export class Input {
     this.keys = new Set();
     this.joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
     this.touchMode = false;
+    this.vibrate = true;
+    this.fixed = false; // fixed joystick: always centred on its home position
     this.enabled = false;
 
     this.base = document.getElementById('joy-base');
@@ -24,10 +26,15 @@ export class Input {
       this.touchMode = true;
       zone.setPointerCapture(e.pointerId);
       this.joy.id = e.pointerId;
-      this.joy.ox = e.clientX; this.joy.oy = e.clientY;
+      if (this.fixed) {
+        const r = this.base.getBoundingClientRect();
+        this.joy.ox = r.left + r.width / 2; this.joy.oy = r.top + r.height / 2;
+      } else { this.joy.ox = e.clientX; this.joy.oy = e.clientY; }
       this.joy.x = e.clientX; this.joy.y = e.clientY;
-      this.base.style.left = e.clientX + 'px';
-      this.base.style.top = e.clientY + 'px';
+      if (!this.fixed) {
+        this.base.style.left = e.clientX + 'px';
+        this.base.style.top = e.clientY + 'px';
+      }
       this.base.classList.add('active');
       this._updateKnob();
     });
@@ -39,7 +46,7 @@ export class Input {
       const R = this.radius();
       const dx = this.joy.x - this.joy.ox, dy = this.joy.y - this.joy.oy;
       const d = Math.hypot(dx, dy);
-      if (d > R * 1.6) {
+      if (d > R * 1.6 && !this.fixed) {
         const k = (d - R * 1.6) / d;
         this.joy.ox += dx * k; this.joy.oy += dy * k;
         this.base.style.left = this.joy.ox + 'px';
@@ -68,7 +75,7 @@ export class Input {
         ids.add(e.pointerId);
         if (!st.down) { st.down = true; st.pressed = true; st.held = 0; st.flick = false; st.fired = false; st.sx = e.clientX; st.sy = e.clientY; }
         el.classList.add('down');
-        if (navigator.vibrate) try { navigator.vibrate(8); } catch (_) { /* ignore */ }
+        if (this.vibrate && navigator.vibrate) try { navigator.vibrate(8); } catch (_) { /* ignore */ }
       });
       el.addEventListener('pointermove', e => {
         if (!ids.has(e.pointerId) || !st.down || st.flick) return;
@@ -79,7 +86,7 @@ export class Input {
           st.flick = true;
           el.classList.add('flicked');
           setTimeout(() => el.classList.remove('flicked'), 350);
-          if (navigator.vibrate) try { navigator.vibrate(15); } catch (_) { /* ignore */ }
+          if (this.vibrate && navigator.vibrate) try { navigator.vibrate(15); } catch (_) { /* ignore */ }
           st.fire = true; st.fireType = dir; st.fired = true;
           return;
         }
@@ -88,7 +95,7 @@ export class Input {
           st.flick = true;
           el.classList.add('flicked');
           setTimeout(() => el.classList.remove('flicked'), 350);
-          if (navigator.vibrate) try { navigator.vibrate(15); } catch (_) { /* ignore */ }
+          if (this.vibrate && navigator.vibrate) try { navigator.vibrate(15); } catch (_) { /* ignore */ }
           if (k === 'pass' || k === 'through') { st.fire = true; st.fireType = 'up'; st.fired = true; }
         }
       });

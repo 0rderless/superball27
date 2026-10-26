@@ -12,7 +12,7 @@ export class Sound {
     if (!AC) return;
     const ctx = this.ctx = new AC();
     this.master = ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : 0.9;
+    this.master.gain.value = this.muted ? 0 : 0.9 * (this.vol == null ? 1 : this.vol);
     this.master.connect(ctx.destination);
 
     // brown-ish noise buffer
@@ -55,7 +55,14 @@ export class Sound {
 
   setMuted(m) {
     this.muted = m;
-    if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.05);
+    this.setVolume(this.vol == null ? 1 : this.vol);
+  }
+
+  // master volume 0..1, crowd level 0..1
+  setVolume(v, crowd = this.crowdMul == null ? 1 : this.crowdMul) {
+    this.vol = v;
+    this.crowdMul = crowd;
+    if (this.master) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.9 * v, this.ctx.currentTime, 0.05);
   }
 
   // excitement 0..1 driven by how close the ball is to goal
@@ -63,7 +70,9 @@ export class Sound {
     if (!this.ctx) return;
     this.excite += (excite - this.excite) * 0.02;
     const t = this.ctx.currentTime;
-    this.crowdGain.gain.setTargetAtTime(0.16 + this.excite * 0.22, t, 0.3);
+    const cm = this.crowdMul == null ? 1 : this.crowdMul;
+    this.crowdGain.gain.setTargetAtTime((0.16 + this.excite * 0.22) * cm, t, 0.3);
+    this.murmur.gain.setTargetAtTime(0.06 * cm, t, 0.3);
     this.crowdFilter.frequency.setTargetAtTime(560 + this.excite * 400, t, 0.3);
   }
 

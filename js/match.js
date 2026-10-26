@@ -493,7 +493,9 @@ export class Match {
     const p = team.controlled;
     if (!p) return;
     const mag = input.mag;
-    const wdir = new V3(input.move.x, 0, -input.move.y);
+    // joystick is relative to the camera: up on screen = camera forward along the ground
+    const cf = this.camFwd || new V3(0, 0, -1);
+    const wdir = new V3(-cf.z * input.move.x + cf.x * input.move.y, 0, cf.x * input.move.x + cf.z * input.move.y);
     if (mag > 0) wdir.normalize();
     const B = input.b;
     const sprint = B.sprint.down || (this.settings.autoSprint && mag > 0.93);
@@ -861,53 +863,125 @@ export class Match {
     if (k.kind === 'shot') { this.stats[p.team.key].shots++; if (k.mode === 'shot' && k.power > 0.4) this.say('shot', { n: p.name }, 1); }
   }
 
-  // Skill moves. type: 'tap' step-over, 'left'/'right' cut, 'up' rainbow flick, 'down' drag-back.
-  // Directions are relative to where the player is running.
+  // ---------------------------------------------------------------- skill moves
+  // Each move scripts the player's path, facing and the ball over its duration, in a frame fixed at
+  // the start of the move (O = origin, f = forward, l = left). The leg animation (model.js) is keyed
+  // to the same normalised time, so foot and ball stay in sync.
+  //   tap   = step-over (feint one way, go the other)      left/right = La Croqueta drag across the body
+  //   down  = sole drag-back + 180° turn                    up = rainbow flick (heel flick over the head)
   skillMove(p, type = 'tap') {
-    if (p.skillCD > 0 || p.pending) return;
+    if (p.skillCD > 0 || p.pending || p.skill) return;
     const ball = this.ball;
-    const f = p.fwd.clone();
-    const left = new V3(f.z, 0, -f.x);
-    const side = type === 'left' ? 1 : type === 'right' ? -1 : (Math.random() < 0.5 ? 1 : -1);
-    let dir, speedK = 0.95, beat = 0.6, name = 'STEP-OVER';
-    if (type === 'left' || type === 'right') { dir = f.clone().multiplyScalar(0.45).addScaledVector(left, side).normalize(); beat = 0.78; name = 'CUT!'; }
-    else if (type === 'down') { dir = f.clone().negate(); speedK = 0.6; beat = 0.7; name = 'DRAG-BACK'; }
-    else if (type === 'up') { dir = f.clone(); beat = 0.85; name = 'RAINBOW FLICK!'; }
-    else dir = f.clone().addScaledVector(left, side * 0.35).normalize();
-    p.skillCD = 0.7;
-    p.skillT = 0.55;
-    p.a.skillT = 0; p.a.skillType = type; p.a.skillSide = -side;
-    const ang = Math.atan2(dir.x, dir.z);
-    if (type === 'up') {
-      // flick the ball up over the defender and run onto it
+    const f = p.fwd.clone(), l = new V3(f.z, 0, -f.x);
+    // go away from the nearest defender if the move has no direction of its own
+    const near = this.nearestOpp(p);
+    let side = type === 'left' ? 1 : type === 'right' ? -1 : 0;
+    if (!side) side = near.p && ((near.p.pos.x - p.pos.x) * l.x + (near.p.pos.z - p.pos.z) * l.z) > 0 ? -1 : 1;
+    const dur = { tap: 0.78, left: 0.52, right: 0.52, down: 0.82, up: 0.8 }[type] || 0.6;
+    p.skill = {
+      type, side, dur, t: 0, O: p.pos.clone(), f, l, face0: p.facing,
+      v0: clamp(Math.hypot(p.vel.x, p.vel.z), 2.5, 7), released: false, beat: false,
+    };
+    p.skillCD = dur + 1.1;
+    p.skillT = dur * 0.45; // brief protection from passive steals at the start of the move
+    p.busy = dur;
+    p.action = 'skill';
+    p.charging = false;
+    Object.assign(p.a, { skillT: 0, skillType: type, skillSide: side, skillDur: dur });
+    ball.owner = p;
+    ball.held = false;
+    const names = { tap: 'STEP-OVER', left: 'LA CROQUETA', right: 'LA CROQUETA', down: 'DRAG-BACK', up: 'RAINBOW FLICK!' };
+    if (p.team.isUser) { this.hooks.event(names[type]); if (Math.random() < 0.5) this.say('skill', { n: p.name }, 1); }
+  }
+
+  updateSkill(p, dt) {
+    const k = p.skill, ball = this.ball;
+    const prevT = k.t;
+    k.t = Math.min(k.dur, k.t + dt);
+    const u = k.t / k.dur, s = k.side;
+    const E = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+    const B = x => Math.sin(Math.PI * clamp(x, 0, 1));
+    let px = 0, pz = 0, face = k.face0, bx = 0, bz = 0.55, by = BALL_R;
+    const run = k.v0 * k.dur;
+    switch (k.type) {
+      case 'tap': // step over with the outside leg, then take it the other way with the other foot
+        pz = run * 0.32 * u + 0.6 * E((u - 0.5) / 0.5);
+        px = -s * 0.28 * B(u / 0.55) + s * 1.1 * E((u - 0.52) / 0.48);
+        bz = 0.55 + run * 0.22 * u + 0.5 * E((u - 0.5) / 0.5);
+        bx = s * 1.25 * E((u - 0.5) / 0.45);
+        face = k.face0 + s * 0.6 * E((u - 0.55) / 0.4);
+        break;
+      case 'left': case 'right': // drag it across from one foot to the other
+        pz = run * 0.45 * u;
+        px = s * 1.35 * E((u - 0.05) / 0.85);
+        bz = 0.5 + run * 0.5 * u;
+        bx = -s * 0.12 + s * 1.55 * E((u - 0.08) / 0.62);
+        face = k.face0 + s * 0.55 * E((u - 0.4) / 0.6);
+        break;
+      case 'down': // sole on top, roll it back, spin round
+        pz = -0.55 * E(u / 0.55);
+        bz = 0.55 - 1.65 * E((u - 0.12) / 0.48);
+        face = k.face0 + s * Math.PI * E((u - 0.32) / 0.5);
+        break;
+      case 'up': { // roll it back between the feet, heel flick up the back of the standing leg
+        pz = run * 0.45 * u;
+        const rel = u < 0.32 ? 0.55 - 0.6 * E(u / 0.32) : -0.05 - 0.28 * E((u - 0.32) / 0.25);
+        bz = pz + rel;
+        by = u < 0.32 ? BALL_R : BALL_R + 0.95 * E((u - 0.32) / 0.25);
+        break;
+      }
+    }
+    const O = k.O, f = k.f, l = k.l;
+    const nx = O.x + f.x * pz + l.x * px, nz = O.z + f.z * pz + l.z * px;
+    p.vel.set((nx - p.pos.x) / Math.max(dt, 1e-3), 0, (nz - p.pos.z) / Math.max(dt, 1e-3));
+    p.pos.x = nx; p.pos.z = nz;
+    p.desired.copy(p.vel);
+    p.facing = wrap(face);
+    p.fwd.set(Math.sin(p.facing), 0, Math.cos(p.facing));
+    p.turnRate = 0;
+    if (!k.released && ball.owner === p) {
+      const wx = O.x + f.x * bz + l.x * bx, wz = O.z + f.z * bz + l.z * bx;
+      ball.vel.set((wx - ball.pos.x) / Math.max(dt, 1e-3), (by - ball.pos.y) / Math.max(dt, 1e-3), (wz - ball.pos.z) / Math.max(dt, 1e-3));
+      ball.pos.set(wx, by, wz);
+    }
+    // the decisive moment: defenders who bit on it are wrong-footed
+    const beatAt = { tap: 0.5, left: 0.3, right: 0.3, down: 0.45, up: 0.57 }[k.type];
+    if (!k.beat && u >= beatAt) {
+      k.beat = true;
+      const goDir = new V3(p.vel.x, 0, p.vel.z).normalize();
+      for (const o of p.team.opp.players) {
+        const d = hdist(o.pos, p.pos);
+        if (d > 3.4 || o.isGK) continue;
+        // only defenders in front, committed to the challenge, can be wrong-footed
+        const inFront = ((o.pos.x - p.pos.x) * k.f.x + (o.pos.z - p.pos.z) * k.f.z) / Math.max(d, 0.01);
+        if (inFront < 0.2) continue;
+        const chance = { tap: 0.48, left: 0.45, right: 0.45, down: 0.42, up: 0.6 }[k.type] - o.st.def * 0.35 + (d < 2 ? 0.08 : 0);
+        if (Math.random() < chance) { o.stun = 0.42; o.a.hitT = 0; o.a.hitBig = false; o.vel.multiplyScalar(0.4); }
+      }
+      this.sound.kick(0.12);
+      if (goDir.lengthSq() > 0) this.sound.ooh && k.type === 'up' && this.sound.ooh();
+    }
+    // rainbow: release the ball over the head
+    if (k.type === 'up' && !k.released && u >= 0.57) {
+      k.released = true;
       ball.owner = null;
-      ball.pos.set(p.pos.x + f.x * 0.4, 0.3, p.pos.z + f.z * 0.4);
-      ball.vel.set(f.x * 7.5, 6.2, f.z * 7.5);
+      ball.vel.set(f.x * (k.v0 + 3.6), 6.3, f.z * (k.v0 + 3.6));
       ball.spin = 0;
       this.kickId++;
       this.lastKick = { kind: 'skill', team: p.team, id: this.kickId, by: p };
-      this.guarantee = { to: p, id: this.kickId, t: 0, minT: 0.55, maxY: 0.9 };
-      p.cool = 0.5;
-      p.vel.copy(f).multiplyScalar(p.maxSpeed(true));
-      this.sound.kick(0.2);
-    } else {
-      p.lockFacing = null;
-      p.facing = ang;
-      p.fwd.set(Math.sin(ang), 0, Math.cos(ang));
-      p.vel.copy(p.fwd).multiplyScalar(p.maxSpeed(true) * speedK);
-      ball.pos.copy(p.pos).addScaledVector(p.fwd, type === 'down' ? 0.7 : 1.0);
-      ball.pos.y = BALL_R;
-      this.sound.kick(0.12);
+      this.guarantee = { to: p, id: this.kickId, t: 0, minT: 0.5, maxY: 0.9 };
+      p.cool = 0.45;
+      this.sound.kick(0.25);
     }
-    // wrong-foot defenders close by (more likely if they were committed the other way)
-    for (const o of p.team.opp.players) {
-      const d = hdist(o.pos, p.pos);
-      if (d > 4 || o.isGK) continue;
-      const committed = Math.max(0, -(o.vel.x * dir.x + o.vel.z * dir.z)) / 8;
-      if (Math.random() < beat - o.st.def * 0.35 + committed * 0.3) { o.stun = 0.5; o.a.hitT = 0; o.a.hitBig = false; }
+    if (prevT < k.dur && k.t >= k.dur) {
+      // burst away in the new direction
+      p.skill = null;
+      p.busy = 0;
+      p.action = null;
+      const dir = k.type === 'up' ? f.clone() : p.fwd.clone();
+      p.vel.copy(dir).multiplyScalar(p.maxSpeed(true) * (k.type === 'down' ? 0.7 : 0.92));
+      p.desired.copy(p.vel);
     }
-    if (p.team.isUser) { this.hooks.event(name); if (Math.random() < 0.5) this.say('skill', { n: p.name }, 1); }
-    if (this.hooks.skill) this.hooks.skill(p, type);
   }
 
   tackle(p, slide) {
@@ -938,7 +1012,7 @@ export class Match {
     const foot = p.pos.clone().addScaledVector(p.fwd, slide ? 0.95 : 0.7);
     if (ball.pos.y > 0.8 || hdist(foot, ball.pos) > (slide ? 1.15 : 0.95)) return;
     const o = ball.owner;
-    if (o === p || (o && o.pending)) return;
+    if (o === p || (o && (o.pending || (o.skill && o.skill.type === 'up')))) return;
     if (!o && this.guarantee && this.guarantee.to !== p) return; // assisted pass in flight
     p.tackleDone = true;
     if (o && o.team === p.team) return;
@@ -1004,7 +1078,9 @@ export class Match {
   updateBall(dt) {
     const ball = this.ball;
     const o = ball.owner;
-    if (o) {
+    if (o && o.skill && !o.skill.released) {
+      // ball path is scripted by updateSkill
+    } else if (o) {
       if (ball.held) {
         if (o.a.throwReady || o.action === 'throw') ball.pos.set(o.pos.x + o.fwd.x * 0.05, 2.15, o.pos.z + o.fwd.z * 0.05);
         else ball.pos.set(o.pos.x + o.fwd.x * 0.36, 1.1, o.pos.z + o.fwd.z * 0.36);
@@ -1989,6 +2065,10 @@ export class Match {
   movePlayers(dt) {
     const ball = this.ball;
     for (const p of this.players) {
+      if (p.skill) {
+        if (ball.owner !== p && !p.skill.released) { p.skill = null; p.busy = 0; p.action = null; }
+        else { this.updateSkill(p, dt); continue; }
+      }
       if (p.pending) {
         p.pending.t -= dt;
         if (p.pending.t <= 0) this.releaseKick(p);
@@ -2076,7 +2156,7 @@ export class Match {
       a.speed = sp;
       if (sp > 0.15) a.phase += dt * (4.3 + sp * 0.66);
       const adv = (k, dur) => { if (a[k] >= 0) { a[k] += dt / dur; if (a[k] > 1) a[k] = -1; } };
-      adv('kickT', 0.42); adv('tackleT', 0.5); adv('slideT', 1.0); adv('headerT', 0.5); adv('throwT', 0.55); adv('hitT', 0.7); adv('skillT', 0.55);
+      adv('kickT', 0.42); adv('tackleT', 0.5); adv('slideT', 1.0); adv('headerT', 0.5); adv('throwT', 0.55); adv('hitT', 0.7); adv('skillT', a.skillDur || 0.6);
       a.moveAngle = sp > 0.3 ? wrap(Math.atan2(p.vel.x, p.vel.z) - p.facing) : 0;
       a.turnRate = p.turnRate || 0;
       if (a.diveT >= 0) { a.diveT += dt / 1.25; if (a.diveT > 1 || p.action !== 'dive') a.diveT = -1; }

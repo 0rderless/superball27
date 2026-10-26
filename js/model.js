@@ -16,9 +16,9 @@ const R = { SKIN: 0, HEAD: 1, SHIRT: 2, ARM: 3, HAND: 4, SHORTS: 5, LEG: 6, SOCK
 
 let A = null; // loaded assets
 
-export async function loadPlayerAssets(url = 'assets/player.glb') {
+export async function loadPlayerAssets(url = 'assets/player.glb', onProgress) {
   if (A) return A;
-  const gltf = await new GLTFLoader().loadAsync(url);
+  const gltf = await new GLTFLoader().loadAsync(url, e => { if (onProgress && e.total) onProgress(e.loaded / e.total); });
   const scene = gltf.scene;
   scene.updateMatrixWorld(true);
   const meshes = [];
@@ -317,10 +317,6 @@ export function animateModel(m, a, time, dt) {
   if (started('slideT')) playShot(m, 'Slide_Loop', { fadeIn: 0.08, from: 0.05, speed: 1.2 });
   if (started('throwT')) playShot(m, 'OverhandThrow', { fadeIn: 0.05, from: 0.25, speed: 1.25 });
   if (started('hitT')) playShot(m, a.hitBig ? 'Hit_Knockback' : 'Hit_Chest', { fadeIn: 0.05, speed: 1.2 });
-  if (started('skillT')) {
-    const clip = { left: 'Dodge_Left', right: 'Dodge_Right', down: a.skillSide > 0 ? 'Turn180_R' : 'Turn180_L', up: 'Jump_Start', tap: a.skillSide > 0 ? 'Dodge_Right' : 'Dodge_Left' }[a.skillType] || 'Dodge_Left';
-    playShot(m, clip, { fadeIn: 0.06, speed: clip.startsWith('Turn') ? 2.2 : clip === 'Jump_Start' ? 1.8 : 1.7, from: clip === 'Jump_Start' ? 0.2 : 0.1 });
-  }
   const celebrating = a.celebrate > 0.5 && a.celebrateStyle === 1;
   if (celebrating && !(m.shot && m.shot.celeb)) {
     const list = ['Celebration', 'Yes', 'Dance_Loop', 'BackFlip'];
@@ -445,6 +441,7 @@ export function animateModel(m, a, time, dt) {
     rot(m, 'lowerarm_l', 'x', -0.3 * w); rot(m, 'lowerarm_r', 'x', -0.3 * w);
     rot(m, 'thigh_l', 'x', -0.3 * w); rot(m, 'calf_l', 'x', 0.5 * w); rot(m, 'calf_r', 'x', 0.7 * w);
   }
+  if (a.skillT >= 0) skillPose(m, a);
   if (a.hold) blendPose(m, A.poses.hold, 0.9);
   if (a.throwReady) blendPose(m, A.poses.throw, 0.9);
   if (a.celebrate > 0 && a.celebrateStyle === 0) {
@@ -453,4 +450,62 @@ export function animateModel(m, a, time, dt) {
     body.rotation.z += Math.sin(time * 3) * 0.16 * a.celebrate;
   }
   if (a.sad > 0 && sp > 0.4) { rot(m, 'neck_01', 'x', 0.4 * a.sad); rot(m, 'spine_03', 'x', 0.15 * a.sad); }
+}
+
+// ---- skill moves: hand-keyed leg work, timed to the ball path scripted in match.updateSkill ----
+// outward(leg): sign of the thigh Z rotation that moves that foot away from the body
+const outward = leg => (leg === 'r' ? 1 : -1);
+function skillPose(m, a) {
+  const u = a.skillT, s = a.skillSide; // s > 0: the move finishes going to the player's left
+  const B = x => Math.sin(Math.PI * Math.min(1, Math.max(0, x)));
+  const E = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+  const fade = Math.min(1, u * 7, (1 - u) * 5);
+  blendPose(m, A.restLegs || (A.restLegs = restPose(/^(thigh|calf|foot)_[lr]$/)), 0.8 * fade);
+  const body = m.body;
+  const T = (leg, x, z = 0, calf = 0, foot = 0) => {
+    rot(m, 'thigh_' + leg, 'x', x * fade); rot(m, 'thigh_' + leg, 'z', z * fade);
+    rot(m, 'calf_' + leg, 'x', calf * fade); rot(m, 'foot_' + leg, 'x', foot * fade);
+  };
+  switch (a.skillType) {
+    case 'tap': { // step-over: outside leg circles over the ball, the other foot takes it away
+      const feint = s > 0 ? 'r' : 'l', push = s > 0 ? 'l' : 'r';
+      const u1 = u / 0.52, u2 = (u - 0.5) / 0.42;
+      T(feint, -0.95 * B(u1), outward(feint) * 0.75 * Math.sin(Math.PI * Math.min(1, Math.max(0, u1))) * (u1 < 1 ? 1 : 0), 1.25 * B(u1), -0.2 * B(u1));
+      T(push, -0.6 * B(u2) + 0.1 * B(u1), outward(push) * 0.4 * B(u2), 0.55 * B(u2) + 0.3 * B(u1), 0);
+      body.rotation.z += (feint === 'r' ? 1 : -1) * (0.24 * B(u / 0.55) - 0.22 * B(u2));
+      rot(m, 'spine_02', 'y', (feint === 'r' ? -1 : 1) * 0.35 * B(u / 0.55));
+      body.position.y -= 0.06 * B(u1);
+      rot(m, 'upperarm_l', 'z', 0.45 * B(u)); rot(m, 'upperarm_r', 'z', -0.45 * B(u));
+      break;
+    }
+    case 'left': case 'right': { // La Croqueta: inside of one foot drags it across to the other
+      const sweep = s > 0 ? 'r' : 'l', recv = s > 0 ? 'l' : 'r';
+      const u1 = u / 0.48, u2 = (u - 0.25) / 0.6;
+      T(sweep, -0.5 * B(u1), -outward(sweep) * 0.55 * B(u1), 0.45 * B(u1), 0);
+      T(recv, -0.55 * B(u2), outward(recv) * 0.45 * B(u2), 0.55 * B(u2), 0);
+      body.rotation.z += (recv === 'r' ? 1 : -1) * 0.2 * B(u);
+      body.position.y += 0.05 * B(u * 2 % 1);
+      rot(m, 'upperarm_l', 'z', 0.5 * B(u)); rot(m, 'upperarm_r', 'z', -0.5 * B(u));
+      break;
+    }
+    case 'down': { // drag-back: sole on the ball, roll it back, spin
+      const reach = u < 0.2 ? -0.8 * E(u / 0.2) : u < 0.56 ? -0.8 + 1.1 * E((u - 0.2) / 0.36) : 0.3 * (1 - E((u - 0.56) / 0.3));
+      T('r', reach, 0, 0.5 * B(u / 0.75), 0.45 * B(u / 0.7));
+      T('l', 0.05, 0, 0.4 * B(u / 0.8), 0);
+      body.position.y += 0.08 * B((u - 0.18) / 0.42);
+      rot(m, 'spine_02', 'x', -0.12 * B(u / 0.4) + 0.2 * B((u - 0.45) / 0.5));
+      rot(m, 'upperarm_l', 'z', 0.55 * B(u)); rot(m, 'upperarm_r', 'z', -0.55 * B(u));
+      break;
+    }
+    case 'up': { // rainbow flick: roll it back with the right sole, heel flick with the left
+      const u1 = u / 0.34, u2 = (u - 0.3) / 0.42;
+      T('r', u < 0.34 ? -0.7 + 0.85 * E(u1) : 0.15 * (1 - E((u - 0.34) / 0.3)), 0, 0.45 * B(u1), 0.45 * B(u1));
+      T('l', 0.5 * B(u2), 0, 2.2 * B(u2), 0.7 * B(u2));
+      rot(m, 'spine_02', 'x', 0.45 * B(u2));
+      rot(m, 'neck_01', 'x', -0.35 * B(u2));
+      body.position.y += 0.1 * B((u - 0.45) / 0.3);
+      rot(m, 'upperarm_l', 'z', 0.8 * B(u2)); rot(m, 'upperarm_r', 'z', -0.8 * B(u2));
+      break;
+    }
+  }
 }
