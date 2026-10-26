@@ -29,6 +29,22 @@ const duelsSnippet = `
   window.__r = { duels: 40, won, winRate: won / 40, tackles: starts, tacklesWon: good };
 `;
 
+// a carrier standing on the ball with a defender in front keeps it: nothing is running into him
+const standSnippet = `
+  const c = m.home.players.find(q => q.role === 'ST'), cb = m.away.players.find(q => q.role === 'CB');
+  let lost = 0;
+  for (let k = 0; k < 10; k++) {
+    giveBall(c); stick(0, 0); step(30);
+    cb.busy = 0; cb.stun = 0; cb.tackleCD = 0; cb.pokeCD = 0; cb.pos.set(c.pos.x + 4, 0, c.pos.z); cb.vel.set(0, 0, 0);
+    m.possTeam = m.home;
+    for (let i = 0; i < 360; i++) { stick(0, 0); step(); if (m.ball.owner !== c) { lost++; break; } }
+  }
+  // reaction timers don't carry over to a new possession
+  cb.exposedT = 0.3; cb.tkSeen = 0.3; cb.containT = 1.2;
+  m.gainBall(m.home.players.find(q => q.role === 'CM'), false);
+  window.__s = { lost, timers: [cb.exposedT, cb.tkSeen, cb.containT] };
+`;
+
 const res = [];
 {
   const { page, browser } = await openMatch({ difficulty: 'legend' });
@@ -45,6 +61,9 @@ const res = [];
     return window.__c;
   }, isolateSnippet);
   check(res, 'stronger player holds his line on contact', contact.d > 2 * contact.a, contact);
+  const stand = await page.evaluate(src => { eval(src); return window.__s; }, isolateSnippet + standSnippet);
+  check(res, 'legend: standing on the ball with a defender in front: kept ≥ 8/10', stand.lost <= 2, stand);
+  check(res, 'defender reaction timers reset when possession changes', stand.timers.every(v => !v), stand.timers);
   const legend = await page.evaluate(src => { eval(src); return window.__r; }, isolateSnippet + duelsSnippet);
   console.log('legend', JSON.stringify(legend));
   if (page.errors.length) check(res, 'no page errors (legend)', false, page.errors.slice(0, 3));
@@ -53,6 +72,8 @@ const res = [];
 }
 const legend = globalThis.legend;
 const { page, browser } = await openMatch({ difficulty: 'beginner' });
+const standB = await page.evaluate(src => { eval(src); return window.__s; }, isolateSnippet + standSnippet);
+check(res, 'beginner: standing on the ball with a defender in front: kept ≥ 8/10', standB.lost <= 2, standB);
 const beginner = await page.evaluate(src => { eval(src); return window.__r; }, isolateSnippet + duelsSnippet);
 console.log('beginner', JSON.stringify(beginner));
 

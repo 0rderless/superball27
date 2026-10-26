@@ -240,7 +240,7 @@ export class Match {
         p.facing = t.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
         p.fwd.set(Math.sin(p.facing), 0, Math.cos(p.facing));
         p.busy = 0; p.action = null; p.pending = null; p.recv = null; p.stun = 0; p.save = null;
-        p.lockFacing = null; p.skill = null; p.drib = null;
+        p.lockFacing = null; p.skill = null; p.drib = null; p.exposedT = 0; p.tkSeen = 0; p.containT = 0; p.pokeCD = 0;
         p.a.celebrate = 0; p.a.sad = 0; p.a.diveT = -1; p.a.slideT = -1; p.a.kickT = -1; p.a.throwReady = false; p.a.hold = false;
       });
     }
@@ -1129,6 +1129,8 @@ export class Match {
     ball.owner = p;
     ball.held = !!hands;
     p.drib = null; // first touch is worked out from the incoming ball (see dribble)
+    // a new possession: defenders' reaction timers start again
+    for (const q of this.players) { q.exposedT = 0; q.tkSeen = 0; q.containT = 0; }
     if (hands) ball.vel.set(0, 0, 0); else ball.vel.y = 0;
     ball.spin = 0;
     this.lastTouch = p;
@@ -1472,8 +1474,12 @@ export class Match {
       if (ball.held || o.skillT > 0 || o.pending) return;
       for (const d of o.team.opp.players) {
         if (d.stun > 0 || d.busy > 0 || d.isGK) continue;
-        // the ball runs into his legs: blocked
+        // the ball (or the dribbler) runs into his legs: blocked. Standing next to a still ball isn't a block.
         if (hdist(d.pos, ball.pos) < 0.42) {
+          const rx = d.pos.x - ball.pos.x, rz = d.pos.z - ball.pos.z, rl = Math.hypot(rx, rz) || 1;
+          const ballIn = ((ball.vel.x - d.vel.x) * rx + (ball.vel.z - d.vel.z) * rz) / rl;
+          const carrierIn = ((o.vel.x - d.vel.x) * rx + (o.vel.z - d.vel.z) * rz) / rl;
+          if (ballIn < 1 && carrierIn < 1) continue;
           const facing = (ball.pos.x - d.pos.x) * d.fwd.x + (ball.pos.z - d.pos.z) * d.fwd.z > 0;
           if (facing) this.gainBall(d, false);
           else this.knockLoose(o, d, 2.5);
@@ -1958,6 +1964,7 @@ export class Match {
     }
     for (const p of team.players) {
       p.jockey = false;
+      if (p !== presser && p !== cover) p.tkSeen = 0;
       if (p.isGK) { p.jockey = true; this.gkAI(p, dt); continue; }
       if (p.busy > 0 || p.stun > 0) continue;
       const userCtl = team.isUser && p === team.controlled;

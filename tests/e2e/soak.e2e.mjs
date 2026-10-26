@@ -6,7 +6,7 @@ import { openMatch, check, finish } from './harness.mjs';
 const BOT = `
   const S = window.__sb27, I = S.input; S.match.hooks.fullTime = () => {};
   let stallT = 0, maxStall = 0, lastBall = null, shootHold = 0, t = 0;
-  const ends = { won: 0, kick: 0, out: 0, selfLoss: 0 };
+  const ends = { won: 0, kick: 0, out: 0, selfLoss: 0, released: 0 };
   let owner = null, kickAtGain = 0, phaseAtGain = 'play';
   const set = (k, v) => { const st = I.b[k]; st.pressed = v && !st.down; st.released = !v && st.down; st.fire = st.released && k !== 'shoot'; st.fireType = 'tap'; st.down = v; };
   while (t < 420) {
@@ -33,6 +33,7 @@ const BOT = `
     if (ball.owner !== owner) {
       if (owner && phaseAtGain === 'play') {
         if (ball.owner && ball.owner.team !== owner.team && m.kickId === kickAtGain) ends.won++;
+        else if (m.kickId !== kickAtGain && m.lastKick.kind === 'loose') ends.released++; // safety-net release: a self-loss too
         else if (m.kickId !== kickAtGain) ends.kick++;
         else if (m.phase !== 'play') ends.out++;
         else ends.selfLoss++;
@@ -54,10 +55,10 @@ for (const difficulty of ['amateur', 'pro', 'legend']) {
   const { page, browser } = await openMatch({ difficulty });
   await page.evaluate(() => { localStorage.setItem('sb27.minutes', '6'); });
   const r = await page.evaluate(src => { eval(src); return window.__r; }, BOT);
-  const total = r.ends.won + r.ends.kick + r.ends.out + r.ends.selfLoss;
+  const total = r.ends.won + r.ends.kick + r.ends.out + r.ends.selfLoss + r.ends.released;
   check(res, `${difficulty}: no page errors`, page.errors.length === 0, page.errors.slice(0, 3));
   check(res, `${difficulty}: no stall > 6s`, r.maxStall <= 6, r.maxStall);
-  check(res, `${difficulty}: no self-loss (< 2% of possessions)`, r.ends.selfLoss <= total * 0.02, { ...r.ends, score: r.score, shots: r.shots });
+  check(res, `${difficulty}: no self-loss (< 2% of possessions)`, r.ends.selfLoss + r.ends.released <= total * 0.02, { ...r.ends, score: r.score, shots: r.shots });
   if (last) await last.close();
   last = browser; last.page = page;
 }
