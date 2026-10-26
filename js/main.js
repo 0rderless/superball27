@@ -59,7 +59,7 @@ const TIPS = [
   'Try the Pro camera in Settings for an end-to-end view.',
   'Tap the screen to skip a goal replay.',
   'Push the joystick to the edge to sprint — ZorpFC never tire.',
-  'Hold PRESS to send your player after the ball carrier.',
+  'Defending: hold SPRINT to press the man on the ball.',
 ];
 const tip = () => TIPS[(Math.random() * TIPS.length) | 0];
 
@@ -719,7 +719,7 @@ const SCHEMA = [
   { tab: 'Gameplay', key: 'passAssist', label: 'Pass assist', desc: 'Passes go to who you aim at and follow him', type: 'toggle' },
   { tab: 'Gameplay', key: 'autoSwitch', label: 'Auto switch', desc: 'Control the closest defender automatically', type: 'toggle' },
   { tab: 'Gameplay', key: 'autoSprint', label: 'Auto sprint', desc: 'Push the joystick to the edge to sprint', type: 'toggle' },
-  { tab: 'Gameplay', key: 'defAssist', label: 'Defence assist', desc: 'Hold SPRINT to shadow the man on the ball', type: 'toggle' },
+  { tab: 'Gameplay', key: 'defAssist', label: 'Defence assist', desc: 'Hold SPRINT (no stick) to press and contain the man on the ball', type: 'toggle' },
   { tab: 'Camera', key: 'camera', type: 'cams' },
   { tab: 'Camera', key: 'camZoom', label: 'Camera distance', desc: 'Closer or further than the preset', type: 'range', min: 80, max: 125, step: 5, unit: '%' },
   { tab: 'Audio', key: 'volume', label: 'Master volume', type: 'range', min: 0, max: 100, step: 5, unit: '%' },
@@ -973,8 +973,8 @@ function smoothDamp(cur, vel, target, time, dt) {
 let lastMode = '';
 let lastCtl = null;
 const LABELS = {
-  attack: { pass: 'PASS', shoot: 'SHOOT', through: 'THROUGH', skill: 'SKILL' },
-  defend: { pass: 'SWITCH', shoot: 'TACKLE', through: 'PRESS', skill: 'SLIDE' },
+  attack: { pass: 'PASS', shoot: 'SHOOT', through: 'THROUGH', skill: 'SKILL', sprint: 'SPRINT' },
+  defend: { pass: 'SWITCH', shoot: 'TACKLE', through: '2ND PRESS', skill: 'SLIDE', sprint: 'PRESS' },
 };
 const btnSpans = {};
 document.querySelectorAll('[data-btn]').forEach(b => { btnSpans[b.dataset.btn] = b.querySelector('span'); });

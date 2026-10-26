@@ -390,17 +390,18 @@ export function animateModel(m, a, time, dt) {
     else { const w = ease((t - 0.58) / 0.42); h = lerp(-0.9 - 0.6 * p, 0, w); kn = lerp(0.05, 0.1, w); }
     const b = bell(t);
     const fade = Math.min(1, t * 6, (1 - t) * 4);
-    // take the kicking leg out of the run cycle, then swing it through the ball
-    blendPose(m, A.restLeg || (A.restLeg = restPose(/^(thigh_r|calf_r|foot_r)$/)), 0.85 * fade);
-    rot(m, 'thigh_r', 'x', h * fade);
-    rot(m, 'calf_r', 'x', kn * fade);
-    rot(m, 'foot_r', 'x', -0.3 * b);
-    rot(m, 'thigh_l', 'x', -0.15 * b);
-    rot(m, 'calf_l', 'x', 0.35 * b);
-    rot(m, 'upperarm_l', 'z', 0.75 * b);
-    rot(m, 'upperarm_r', 'z', -0.45 * b);
+    // take the kicking leg out of the run cycle, then swing it through the ball (either foot)
+    const left = a.kickFoot === 'L', k = left ? '_l' : '_r', s = left ? '_r' : '_l', mir = left ? -1 : 1;
+    blendPose(m, left ? (A.restLegL || (A.restLegL = restPose(/^(thigh_l|calf_l|foot_l)$/))) : (A.restLeg || (A.restLeg = restPose(/^(thigh_r|calf_r|foot_r)$/))), 0.85 * fade);
+    rot(m, 'thigh' + k, 'x', h * fade);
+    rot(m, 'calf' + k, 'x', kn * fade);
+    rot(m, 'foot' + k, 'x', -0.3 * b);
+    rot(m, 'thigh' + s, 'x', -0.15 * b);
+    rot(m, 'calf' + s, 'x', 0.35 * b);
+    rot(m, 'upperarm' + s, 'z', 0.75 * b * mir);
+    rot(m, 'upperarm' + k, 'z', -0.45 * b * mir);
     rot(m, 'spine_02', 'x', -0.12 * b * p);
-    rot(m, 'spine_02', 'y', -0.25 * b);
+    rot(m, 'spine_02', 'y', -0.25 * b * mir);
     body.position.y -= 0.03 * b;
   }
   if (a.tackleT >= 0) {

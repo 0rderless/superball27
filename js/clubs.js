@@ -1,5 +1,5 @@
-// Opponent clubs for matchmaking. Club names and kit colours are real; crests are simple generic
-// shields (not the official badges) and squads are generated players.
+// Opponent clubs for matchmaking. Club names, kit colours and squads (real players) are real; crests are
+// simple generic shields, not the official badges. Ratings are approximate.
 import { FORMATIONS } from './config.js';
 
 const kit = (shirt, shirt2, trim, shorts, socks, sockTop, number, pattern = 'plain', boots = '#ffffff') =>
@@ -29,6 +29,21 @@ export const CLUBS = [
   { id: 'mun', formation: '4-2-3-1', name: 'Manchester United', short: 'MUN', ovr: 81, color: '#da291c', accent: '#fbe122', initials: 'MU', names: 'en',
     home: kit('#da291c', '#b01f14', '#fbe122', '#ffffff', '#111111', '#da291c', '#ffffff'), away: kit('#f2f2f2', '#dadada', '#da291c', '#111111', '#f2f2f2', '#da291c', '#da291c') },
 ];
+
+// Real squads, in each club's formation slot order: [name, shirt number, rating, skin 0-5, hair 0-5]
+const SQUADS = {
+  rma: [["Courtois", 1, 89, 0, 2], ["Carreras", 18, 81, 1, 1], ["Huijsen", 24, 83, 1, 0], ["Rüdiger", 22, 86, 5, 5], ["Alexander-Arnold", 12, 86, 3, 5], ["Bellingham", 5, 90, 3, 5], ["Tchouaméni", 14, 86, 5, 5], ["Valverde", 8, 89, 1, 2], ["Vinícius", 7, 90, 4, 5], ["Mbappé", 10, 91, 4, 5], ["Rodrygo", 11, 85, 3, 5]],
+  mci: [["Donnarumma", 25, 89, 1, 0], ["Gvardiol", 24, 86, 0, 1], ["Rúben Dias", 3, 88, 1, 0], ["Stones", 5, 84, 0, 2], ["Rico Lewis", 82, 80, 2, 0], ["Reijnders", 4, 85, 1, 1], ["Rodri", 16, 90, 1, 1], ["Foden", 47, 87, 0, 2], ["Doku", 11, 84, 5, 5], ["Haaland", 9, 91, 0, 4], ["Bernardo Silva", 20, 86, 1, 1]],
+  bay: [["Neuer", 1, 86, 0, 3], ["Davies", 19, 85, 5, 5], ["Upamecano", 2, 84, 5, 5], ["Kim", 3, 85, 1, 0], ["Laimer", 27, 83, 0, 2], ["Kimmich", 6, 88, 0, 3], ["Goretzka", 8, 84, 0, 2], ["Luis Díaz", 14, 86, 3, 5], ["Musiala", 10, 89, 3, 1], ["Olise", 17, 87, 4, 5], ["Kane", 9, 90, 0, 2]],
+  liv: [["Alisson", 1, 89, 1, 1], ["Kerkez", 6, 82, 0, 1], ["Van\xa0Dijk", 4, 89, 4, 5], ["Konaté", 5, 85, 5, 5], ["Frimpong", 30, 83, 5, 5], ["Wirtz", 7, 88, 0, 2], ["Gravenberch", 38, 85, 5, 5], ["Szoboszlai", 8, 85, 0, 4], ["Gakpo", 18, 85, 3, 5], ["Isak", 9, 88, 4, 5], ["Salah", 11, 90, 3, 5]],
+  psg: [["Chevalier", 30, 84, 0, 1], ["Nuno Mendes", 25, 87, 4, 5], ["Marquinhos", 5, 86, 2, 5], ["Pacho", 51, 84, 5, 5], ["Hakimi", 2, 88, 3, 5], ["Vitinha", 17, 89, 1, 1], ["João Neves", 87, 86, 1, 1], ["Fabián Ruiz", 8, 85, 1, 1], ["Kvaratskhelia", 7, 88, 0, 1], ["Dembélé", 10, 90, 4, 5], ["Doué", 14, 85, 4, 5]],
+  ars: [["Raya", 1, 87, 1, 5], ["Calafiori", 33, 83, 0, 1], ["Saliba", 2, 88, 5, 5], ["Gabriel", 6, 87, 3, 5], ["Timber", 12, 84, 4, 5], ["Ødegaard", 8, 88, 0, 1], ["Zubimendi", 36, 86, 1, 1], ["Rice", 41, 88, 0, 1], ["Martinelli", 11, 83, 1, 1], ["Gyökeres", 14, 88, 0, 2], ["Saka", 7, 89, 4, 5]],
+  int: [["Sommer", 1, 85, 0, 2], ["Bastoni", 95, 87, 0, 1], ["Acerbi", 15, 84, 0, 0], ["Bisseck", 31, 82, 4, 5], ["Dimarco", 32, 86, 0, 1], ["Barella", 23, 88, 0, 1], ["Çalhanoğlu", 20, 86, 0, 1], ["Mkhitaryan", 22, 84, 0, 0], ["Dumfries", 2, 85, 4, 5], ["Thuram", 9, 86, 4, 5], ["Lautaro", 10, 89, 1, 5]],
+  che: [["Sánchez", 1, 82, 1, 5], ["Cucurella", 3, 84, 0, 1], ["Colwill", 6, 83, 0, 2], ["Fofana", 29, 82, 5, 5], ["Reece James", 24, 85, 4, 5], ["Caicedo", 25, 88, 4, 5], ["Enzo Fernández", 8, 86, 1, 1], ["Pedro Neto", 7, 83, 1, 5], ["Palmer", 10, 89, 0, 2], ["Estêvão", 41, 82, 3, 5], ["João\xa0Pedro", 20, 84, 3, 5]],
+  juv: [["Di\xa0Gregorio", 29, 83, 0, 1], ["Gatti", 4, 82, 0, 1], ["Bremer", 3, 86, 4, 5], ["Kalulu", 15, 82, 5, 5], ["Cambiaso", 27, 83, 0, 1], ["Koopmeiners", 8, 84, 0, 4], ["Locatelli", 5, 83, 0, 1], ["McKennie", 16, 81, 0, 4], ["Conceição", 7, 83, 1, 5], ["Vlahović", 9, 84, 0, 1], ["Yıldız", 10, 85, 1, 1]],
+  mil: [["Maignan", 16, 87, 5, 5], ["Estupiñán", 2, 82, 5, 5], ["Tomori", 23, 83, 4, 5], ["Gabbia", 46, 80, 0, 1], ["Saelemaekers", 56, 81, 1, 1], ["Modrić", 14, 85, 0, 3], ["Youssouf Fofana", 29, 83, 5, 5], ["Leão", 10, 86, 4, 5], ["Loftus-Cheek", 8, 81, 5, 5], ["Pulisic", 11, 85, 0, 2], ["Giménez", 7, 82, 1, 5]],
+  mun: [["Onana", 24, 82, 5, 5], ["Dorgu", 13, 79, 5, 5], ["Lisandro Martínez", 6, 85, 1, 5], ["De\xa0Ligt", 4, 83, 0, 4], ["Dalot", 2, 82, 1, 1], ["Casemiro", 18, 82, 3, 5], ["Mainoo", 37, 81, 4, 5], ["Cunha", 10, 84, 3, 5], ["Bruno Fernandes", 8, 87, 1, 1], ["Mbeumo", 19, 85, 5, 5], ["Šeško", 30, 83, 0, 4]],
+};
 
 const NAMES = {
   en: ['Hargreaves', 'Whitfield', 'Okonkwo', 'Bramley', 'Ashworth', 'Kettering', 'Doyle', 'Mensah', 'Fairbanks', 'Lowe', 'Pemberton', 'Sinclair', 'Adeyemi', 'Thornton', 'Rhodes', 'Caldwell'],
@@ -65,13 +80,19 @@ export function clubSquad(club) {
   const used = new Set();
   const f = FORMATIONS[club.formation] || FORMATIONS['4-3-3'];
   const usedNums = new Set();
+  const real = SQUADS[club.id];
   return f.map((slot, i) => {
-    let name;
-    do { name = pool[(r() * pool.length) | 0]; } while (used.has(name));
-    used.add(name);
-    const base = club.ovr + (['ST', 'LW', 'RW', 'CAM'].includes(slot.role) ? 2 : i === 0 ? 0 : -1) + Math.round((r() - 0.5) * 6);
-    let num = (NUM_BY_ROLE[slot.role] || [20]).find(n => !usedNums.has(n));
-    if (!num) { num = 12; while (usedNums.has(num)) num++; }
+    let name, base, num, skin, hair;
+    if (real && real[i]) {
+      [name, num, base, skin, hair] = real[i];
+    } else {
+      do { name = pool[(r() * pool.length) | 0]; } while (used.has(name));
+      used.add(name);
+      base = club.ovr + (['ST', 'LW', 'RW', 'CAM'].includes(slot.role) ? 2 : i === 0 ? 0 : -1) + Math.round((r() - 0.5) * 6);
+      num = (NUM_BY_ROLE[slot.role] || [20]).find(n => !usedNums.has(n));
+      if (!num) { num = 12; while (usedNums.has(num)) num++; }
+      skin = (r() * 6) | 0; hair = (r() * 6) | 0;
+    }
     usedNums.add(num);
     const sh = ROLE_SHAPE[slot.role];
     const a = {};
@@ -79,7 +100,7 @@ export function clubSquad(club) {
     a.gk = slot.role === 'GK' ? Math.min(95, base + 2) : 25;
     return {
       name, num, pos: slot.role, ovr: Math.min(97, base), a,
-      skin: (r() * 6) | 0, hair: (r() * 6) | 0, style: (r() * 5) | 0,
+      skin, hair, style: (r() * 5) | 0,
       st: { spd: a.pac / 100, pas: a.pas / 100, sho: a.sho / 100, dri: a.dri / 100, def: a.def / 100, gk: a.gk / 100, phy: a.phy / 100 },
     };
   });

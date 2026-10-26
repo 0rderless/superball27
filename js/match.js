@@ -617,11 +617,19 @@ export class Match {
       const q = team.controlled;
       if (B.shoot.pressed) this.tackle(q, false);
       if (B.skill.pressed) this.tackle(q, true);
-      team.callPress = B.through.down;
-      // defence assist: hold SPRINT (no joystick) and your man shadows the ball carrier goal-side
+      // SPRINT is also pressure: your teammates press with you; 2ND PRESS (through) sends one more
+      const pressing = B.sprint.down || B.through.down;
+      team.callPress = pressing;
+      // hold SPRINT (no joystick): close the ball carrier down fast, then contain him goal-side
       q.userJockey = false;
       const carrier = ball.owner && ball.owner.team !== team ? ball.owner : null;
-      if (this.settings.defAssist !== false && carrier && B.sprint.down && mag < 0.3 && q.busy <= 0 && q.stun <= 0) {
+      const assist = this.settings.defAssist !== false && B.sprint.down && mag < 0.3 && q.busy <= 0 && q.stun <= 0;
+      if (assist && (!carrier || hdist(q.pos, carrier.pos) > 3.2)) {
+        const tgt = carrier ? carrier.pos.clone().addScaledVector(carrier.vel, 0.3) : this.interceptPoint(q);
+        q.goTo(tgt, q.maxSpeed(true), 0.8);
+        q.sprint = true; q.manual = true; q.idleT = 0;
+        if (carrier) q.faceTo = carrier.pos;
+      } else if (assist && carrier) {
         const og = new V3(team.goalX - carrier.pos.x, 0, -carrier.pos.z).normalize();
         const d = hdist(q.pos, carrier.pos);
         const tgt = carrier.pos.clone().addScaledVector(carrier.vel, 0.3).addScaledVector(og, d > 5 ? 0.8 : 1.6);
@@ -635,16 +643,9 @@ export class Match {
         q.faceTo = carrier.pos;
         q.userJockey = d < 7;
       }
-      if (B.through.down && mag === 0 && q.busy <= 0) {
-        // auto-press the ball
-        const tgt = ball.owner ? ball.owner.pos.clone().addScaledVector(ball.owner.vel, 0.25) : this.interceptPoint(q);
-        q.goTo(tgt, q.maxSpeed(true), 0.8);
-        q.manual = true;
-        q.idleT = 0;
-      }
       // auto switch to whoever is closest to the ball (eager when you're not steering)
       this._swCD = (this._swCD || 0) - dt;
-      if (this.settings.autoSwitch !== false && !B.through.down && this._swCD <= 0 && q.busy <= 0) {
+      if (this.settings.autoSwitch !== false && !pressing && this._swCD <= 0 && q.busy <= 0) {
         const best = this.bestDefender(team, null);
         if (best && best !== q) {
           const tgt = ball.owner ? ball.owner.pos : this.pred[3];
@@ -904,6 +905,12 @@ export class Match {
     p.a.kickPow = clamp(k.power, 0.2, 1);
     p.desired.multiplyScalar(0.4);
     const dx = k.target.x - p.pos.x, dz = k.target.z - p.pos.z;
+    // which foot: the one the ball is on; if it's central, the foot that opens up the angle
+    // (shooting across to the right is a left-footed strike, and vice versa)
+    const L = Math.hypot(dx, dz) || 1, hx = dx / L, hz = dz / L;
+    const side = (this.ball.pos.x - p.pos.x) * -hz + (this.ball.pos.z - p.pos.z) * hx;
+    const turn = hx * -p.fwd.z + hz * p.fwd.x;
+    p.a.kickFoot = side > 0.1 ? 'R' : side < -0.1 ? 'L' : turn > 0.15 ? 'L' : turn < -0.15 ? 'R' : (p.a.kickFoot || 'R');
     p.lockFacing = Math.atan2(dx, dz);
     p.charging = false;
   }
@@ -1291,7 +1298,8 @@ export class Match {
     if (o.pending || (o.skill && !o.skill.released)) {
       // wind-up: draw the ball onto the kicking foot
       const k = 1 - Math.exp(-dt * 14);
-      const tx = o.pos.x + o.fwd.x * 0.5 - o.fwd.z * 0.06, tz = o.pos.z + o.fwd.z * 0.5 + o.fwd.x * 0.06;
+      const lat = (o.a.kickFoot === 'L' ? -1 : 1) * 0.1; // onto the kicking foot
+      const tx = o.pos.x + o.fwd.x * 0.5 - o.fwd.z * lat, tz = o.pos.z + o.fwd.z * 0.5 + o.fwd.x * lat;
       b.x += (tx - b.x) * k; b.z += (tz - b.z) * k; b.y = BALL_R;
       D.v.set(o.vel.x, 0, o.vel.z);
       ball.vel.copy(D.v);
