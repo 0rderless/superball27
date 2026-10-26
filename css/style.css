@@ -1,23 +1,23 @@
 :root {
-  --bg: #04081a;
-  --glass: rgba(10, 18, 44, 0.72);
-  --glass-2: rgba(16, 28, 64, 0.62);
-  --line: rgba(140, 180, 255, 0.16);
-  --line-2: rgba(140, 180, 255, 0.3);
-  --cyan: #3ee8ff;
-  --blue: #2a6bff;
+  --bg: #07090f;
+  --glass: rgba(14, 17, 26, 0.94);
+  --glass-2: rgba(24, 28, 40, 0.92);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.16);
+  --cyan: #2cf2b5;
+  --blue: #1f6bff;
   --gold: #ffd23f;
   --home: #1d5cff;
   --away: #e0202a;
   --text: #f3f7ff;
-  --muted: #94a6cf;
-  --radius: 18px;
+  --muted: #8b93a7;
+  --radius: 10px;
   --sl: env(safe-area-inset-left, 0px);
   --sr: env(safe-area-inset-right, 0px);
   --st: env(safe-area-inset-top, 0px);
   --sb: env(safe-area-inset-bottom, 0px);
-  --display: 'Russo One', 'Arial Black', Impact, sans-serif;
-  --ui: 'Rajdhani', 'Segoe UI', Roboto, Arial, sans-serif;
+  --display: 'Barlow Condensed', 'Arial Narrow', 'Arial Black', sans-serif;
+  --ui: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
   --btn-scale: 1;
 }
 
@@ -610,3 +610,31 @@ svg { display: block; }
 .pm-go { display: none; font-family: var(--display); letter-spacing: 3px; font-size: 14px; margin-bottom: 6px; animation: pulse 1.2s infinite; }
 #prematch.ready .pm-go { display: block; }
 #prematch.ready .pm-tip { display: none; }
+
+/* ---------- Pro theme: flat surfaces, condensed sports type, one accent ---------- */
+h1, h2, h3, .pc-name, .pc-ovr b { font-weight: 800; letter-spacing: .3px; }
+[class*="title"], h1, h2 { font-style: italic; text-transform: uppercase; }
+* { text-shadow: none !important; }
+.slot.sel .pcard { filter: drop-shadow(0 0 0 2px var(--cyan)) drop-shadow(0 0 3px var(--cyan)); }
+button:active { transform: scale(.97); }
+/* squad: readable details, cards that don't pile up on phones */
+.squad-detail { align-items: stretch; overflow: hidden; }
+.sd-info { overflow-y: auto; justify-content: flex-start; padding-right: 2px; }
+.sd-info h3 { line-height: 1.15; padding-top: 2px; flex: none; font-size: 22px; }
+.pc-name { letter-spacing: 0; }
+@media (max-height: 430px) {
+  .slot .pcard.mini { font-size: 4.7px; }
+  .sd-info h3 { font-size: 19px; }
+}
+.form-pick { flex-wrap: nowrap; }
+.form-pick button { padding: 3px 2px; font-size: 11px; min-width: 0; }
+.form-pick button.on { background: var(--cyan); color: #04120d; }
+@media (max-height: 430px) { .slot .pcard.mini { font-size: 4.3px; } }
+/* custom button layout (pause → Button layout) */
+#buttons.custom { inset: 0; width: auto; height: auto; transform: none; }
+#buttons.custom .btn { right: auto; bottom: auto; translate: -50% -50%; scale: var(--btn-scale); }
+#layout-edit { position: fixed; inset: 0; z-index: 45; touch-action: none; background: rgba(4, 6, 12, .35); }
+#layout-edit .le-bar { position: absolute; top: calc(10px + var(--st)); left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 16px; border-radius: var(--radius); background: var(--glass); border: 1px solid var(--line-2); white-space: nowrap; }
+#layout-edit .le-bar b { font-family: var(--display); font-size: 17px; text-transform: uppercase; letter-spacing: .5px; }
+#controls.editing { z-index: 44; }
+#controls.editing .btn { outline: 2px dashed rgba(255, 255, 255, .8); outline-offset: 4px; }

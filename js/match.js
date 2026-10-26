@@ -6,6 +6,7 @@ import { advanceGait, slotDistance, planTouch, ROLL_DECEL, FOOT_REACH, exposure,
 
 const V3 = THREE.Vector3;
 const { HL, HW, GW, GH, GD } = F;
+const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rand = (a, b) => a + Math.random() * (b - a);
 const gauss = () => (Math.random() + Math.random() + Math.random() + Math.random() - 2) * 1.73;
@@ -255,6 +256,13 @@ export class Match {
     this.possTeam = kickTeam;
     if (kickTeam.isUser) this.home.controlled = st;
     else this.home.controlled = this.home.striker;
+  }
+
+  scoreLine() {
+    const h = this.home, a = this.away;
+    if (h.score === a.score) return `${h.score} all`;
+    const [w, l] = h.score > a.score ? [h, a] : [a, h];
+    return `${w.cfg.name} lead ${w.score}, ${l.score}`;
   }
 
   say(key, vars, prio = 1) { if (this.hooks.say) this.hooks.say(key, { t: this.away.cfg.name, ...(vars || {}) }, prio); }
@@ -1120,7 +1128,7 @@ export class Match {
     o.a.hitT = 0; o.a.hitBig = slide;
     if (res === 'win' && !slide) { this.gainBall(p, false); this.sound.kick(0.3); }
     else this.knockLoose(o, p, rand(3, 6));
-    if (p.team.isUser) { this.hooks.event('WON IT!'); this.say('tackle', {}, 1); }
+    if (p.team.isUser) { this.hooks.event('WON IT!'); this.say('tackle', { n: p.name }, 1); }
   }
 
   // ---------------------------------------------------------------- ball
@@ -1347,7 +1355,7 @@ export class Match {
     // (the footfall the last touch was planned for, or sooner if he's about to run over it)
     const atFoot = ahead > -0.2 && Math.abs(side) < 0.5 &&
       ((this.time >= D.nextT - 0.05 && ahead < FOOT_REACH + 0.32) || ahead < FOOT_REACH + 0.04);
-    const canCut = errD > 0.45 && dist < slot + 0.5 && ahead > -0.2 && this.time - D.lastTouchT > 0.1;
+    const canCut = errD > 0.35 && dist < slot + 0.5 && ahead > -0.2 && this.time - D.lastTouchT > 0.08;
     const letGo = dsp < 0.4 || (o.letGo && o.team.isUser && o === o.team.controlled);
     const runningAway = ahead > FOOT_REACH + 0.15 && D.v.x * hx + D.v.z * hz > sp;
     if ((strike || runningAway) && letGo && sp > 0.6 && dist < slot + 0.6 && ahead > -0.2) {
@@ -1371,6 +1379,14 @@ export class Match {
         const { v, T } = planTouch({ ball: b, pos: o.pos, vel, dir: { x: dx, z: dz }, sp, dri: ctrl, phase: o.a.gait, scale: errD > 0.45 ? 0.45 : 1 });
         touch(v.x, v.z, strike || o.a.swing, errD > 0.45 ? sgnD : 0, T);
       }
+    }
+    // between touches he guides it with the outside/inside of the foot: a rolling ball within his
+    // circle bends toward where he's steering (freer left/right control, better dribblers more so)
+    const gs = Math.hypot(D.v.x, D.v.z);
+    if (dsp > 0.4 && gs > 0.5 && dist < slot + 0.5 && !letGo && D.plant <= 0 && errD < 0.6) {
+      const cur = Math.atan2(D.v.x, D.v.z), want = Math.atan2(ux, uz);
+      const turn = clamp(wrap(want - cur), -(3 + 3 * ctrl) * dt, (3 + 3 * ctrl) * dt);
+      D.v.set(Math.sin(cur + turn) * gs, 0, Math.cos(cur + turn) * gs);
     }
     // roll
     const bs = Math.hypot(D.v.x, D.v.z);
@@ -1471,6 +1487,9 @@ export class Match {
     const ball = this.ball;
     const o = ball.owner;
     if (o) {
+      const al = o.team.along(o.pos);
+      if (o.team.isUser && !o.inBoxCall && al > 0.8 && Math.abs(o.pos.z) < 22) { o.inBoxCall = true; this.say('attack', { n: o.name }, 1); }
+      else if (al < 0.65) o.inBoxCall = false;
       if (ball.held || o.skillT > 0 || o.pending) return;
       for (const d of o.team.opp.players) {
         if (d.stun > 0 || d.busy > 0 || d.isGK) continue;
@@ -1660,7 +1679,7 @@ export class Match {
     this.ball.owner = null;
     this.hooks.hint('');
     this.hooks.goal(team, own ? `${lt.name} (OG)` : this.scorer.name, own);
-    this.say(own ? 'ownGoal' : team.isUser ? 'goalHome' : 'goalAway', { n: this.scorer.name }, 3);
+    this.say(own ? 'ownGoal' : team.isUser ? 'goalHome' : 'goalAway', { n: this.scorer.name, s: this.scoreLine(), m: ordinal(Math.max(1, Math.ceil(this.minute))) }, 3);
     if (team.isUser) this.sound.cheer(); else { this.sound.swell(0.4, 3, 700); this.sound.ooh(); }
     this.sound.whistle(1);
     for (const p of this.players) {
@@ -1829,13 +1848,16 @@ export class Match {
           const sc = ang * 2 + d * 0.03;
           if (sc < bs) { bs = sc; m = q; }
         }
+        // nobody where he's aiming: the nearest teammate rather than throwing it away
+        if (!m) for (const q of team.players) { if (q === p || q.isGK) continue; const d = hdist(q.pos, p.pos); if (d > 3 && d < bs) { bs = d; m = q; } }
       }
       const target = m ? m.pos.clone().addScaledVector(m.vel, 0.6) : p.pos.clone().addScaledVector(aim, 12);
       target.z = clamp(target.z, -HW + 1, HW - 1);
       if (m) m.recv = { point: target.clone(), t: 0 };
       if (team.isUser && m) this.setControlled(m);
       p.action = 'throw'; p.busy = 0.55; p.actionT = 0; p.a.throwT = 0;
-      p.pending = { mode: 'loft', target, angle: 0.42, power: 0.3, kind: 'throw', t: 0.28 };
+      // a throw to a teammate reaches him (markers can't nick it out of the air)
+      p.pending = { mode: 'loft', target, angle: 0.42, power: 0.3, kind: 'throw', t: 0.28, guarantee: m || null };
       return;
     }
     if (r.type === 'corner' && kind !== 'through') {
@@ -2361,13 +2383,13 @@ export class Match {
     if (sv.catch) {
       this.gainBall(gk, true);
       this.hooks.event('SAVED!');
-      this.say('catch', {}, 2);
+      this.say('catch', { k: gk.name }, 2);
     } else {
       const s = Math.sign(gk.team.goalX);
       ball.vel.set(-s * rand(3, 8), rand(2, 6), Math.sign(sv.lateral || 1) * rand(3, 8));
       gk.cool = 0.6;
       this.hooks.event('WHAT A SAVE!');
-      this.say('save', {}, 2);
+      this.say('save', { k: gk.name }, 2);
     }
     this.sound.thud(8);
     this.sound.ooh();

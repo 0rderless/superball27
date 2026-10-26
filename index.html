@@ -15,7 +15,7 @@
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,800&family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -211,6 +211,11 @@
     </div>
   </div>
 
+  <!-- ============ BUTTON LAYOUT EDITOR ============ -->
+  <div id="layout-edit" class="hidden">
+    <div class="le-bar"><b>Drag the buttons where you want them</b><button class="mbtn" id="le-reset">Reset</button><button class="mbtn primary" id="le-done">Done</button></div>
+  </div>
+
   <!-- ============ PAUSE ============ -->
   <div id="pause" class="screen hidden">
     <div class="pause-panel">
@@ -224,6 +229,7 @@
       <div class="pp-grid">
         <button class="mbtn" id="pause-settings">Settings</button>
         <button class="mbtn" id="pause-controls">Controls</button>
+        <button class="mbtn" id="pause-layout">Button layout</button>
         <button class="mbtn" id="restart-btn">Restart</button>
         <button class="mbtn danger" id="quit-btn">Quit</button>
       </div>

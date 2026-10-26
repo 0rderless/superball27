@@ -343,7 +343,7 @@ const coin = n => `<svg class="ico"><use href="#i-coin"/></svg>${n.toLocaleStrin
 
 // squad: pitch (attacking to the right) + reserves + player detail
 // pitch position (%) of a formation slot, attacking to the right
-const slotXY = sl => [6 + sl.a / 0.72 * 82, 50 + sl.c * 38];
+const slotXY = sl => [6 + sl.a / 0.72 * 82, 50 + sl.c * 44];
 const FORMATION_NAMES = ['4-3-3', '4-4-2', '4-2-3-1', '4-1-2-1-2', '3-5-2', '3-4-3', '5-3-2'];
 let selSlot = null, selBench = null;
 function renderSquad() {
@@ -653,6 +653,61 @@ $('resume-btn').addEventListener('click', resume);
 $('pause-settings').addEventListener('click', () => openSettings());
 $('pause-controls').addEventListener('click', () => openModal('help'));
 $('restart-btn').addEventListener('click', () => { closeModals(); startPrematch(); });
+
+// ---------------------------------------------------------------- button layout editor
+// Positions are button centres in % of the screen, saved on the device.
+const LAYOUT_KEY = 'sb27.layout';
+function loadLayout() { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)) || null; } catch (_) { return null; } }
+function applyLayout(L) {
+  const box = $('buttons');
+  box.classList.toggle('custom', !!L);
+  for (const b of box.querySelectorAll('.btn')) {
+    const p = L && L[b.dataset.btn];
+    b.style.left = p ? p[0] + '%' : '';
+    b.style.top = p ? p[1] + '%' : '';
+  }
+}
+applyLayout(loadLayout());
+let layoutDraft = null, dragBtn = null;
+function editLayout() {
+  if (state !== 'paused') return;
+  showScreen(null); // shows the controls so they can be measured and dragged
+  const L = {};
+  for (const b of $('buttons').querySelectorAll('.btn')) {
+    const r = b.getBoundingClientRect();
+    L[b.dataset.btn] = [(r.left + r.width / 2) / innerWidth * 100, (r.top + r.height / 2) / innerHeight * 100];
+  }
+  layoutDraft = L;
+  applyLayout(L);
+  $('controls').classList.add('editing');
+  $('layout-edit').classList.remove('hidden');
+}
+function endLayoutEdit(save) {
+  if (save && layoutDraft) { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layoutDraft)); } catch (_) { /* private mode */ } }
+  layoutDraft = null;
+  $('controls').classList.remove('editing');
+  $('layout-edit').classList.add('hidden');
+  showScreen('pause');
+}
+$('pause-layout').addEventListener('click', editLayout);
+$('le-done').addEventListener('click', () => endLayoutEdit(true));
+$('le-reset').addEventListener('click', () => { try { localStorage.removeItem(LAYOUT_KEY); } catch (_) { /* ignore */ } applyLayout(null); layoutDraft = null; endLayoutEdit(false); });
+$('layout-edit').addEventListener('pointerdown', e => {
+  if (e.target.closest('.le-bar')) return;
+  dragBtn = null;
+  for (const b of $('buttons').querySelectorAll('.btn')) {
+    const r = b.getBoundingClientRect();
+    if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) dragBtn = b;
+  }
+  if (dragBtn) $('layout-edit').setPointerCapture(e.pointerId);
+});
+$('layout-edit').addEventListener('pointermove', e => {
+  if (!dragBtn || !layoutDraft) return;
+  const x = clamp(e.clientX / innerWidth * 100, 4, 96), y = clamp(e.clientY / innerHeight * 100, 8, 94);
+  layoutDraft[dragBtn.dataset.btn] = [+x.toFixed(2), +y.toFixed(2)];
+  applyLayout(layoutDraft);
+});
+$('layout-edit').addEventListener('pointerup', () => { dragBtn = null; });
 $('quit-btn').addEventListener('click', () => { closeModals(); goMenu(); });
 $('again-btn').addEventListener('click', () => startMatchmaking());
 $('menu-btn').addEventListener('click', () => goMenu());

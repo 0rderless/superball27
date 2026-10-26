@@ -36,6 +36,13 @@ const r = await page.evaluate(src => {
     } }
     out.random = { lost };
 
+    // gentle steer (30°) at a jog: the ball follows within 0.35s, staying close
+    giveBall(c); stick(0.65, 0); step(120);
+    const h0 = Math.atan2(c.vel.x, c.vel.z);
+    stick(0.65 * Math.cos(0.52), -0.65 * Math.sin(0.52)); step(21);
+    const h1 = Math.atan2(c.vel.x, c.vel.z), hb = Math.atan2(m.ball.vel.x, m.ball.vel.z);
+    out.steer = { turned: +Math.abs(h1 - h0).toFixed(2), ballVsRun: +Math.abs(Math.atan2(Math.sin(hb - h1), Math.cos(hb - h1))).toFixed(2), d: +Math.hypot(m.ball.pos.x - c.pos.x, m.ball.pos.z - c.pos.z).toFixed(2) };
+
     giveBall(c); stick(1, 0, true); step(120); stick(0, 1, true); step(60);
     out.cut90 = { kept: m.ball.owner === c };
     giveBall(c); stick(1, 0, true); step(120); stick(-1, 0, true); step(100);
@@ -74,6 +81,7 @@ check(res, 'jog: every touch on a footfall', r.jog.touches > 0 && r.jog.offStrik
 check(res, 'sprint: ball pushed out to ~1m and back', r.sprint.lo >= 0.15 && r.sprint.hi >= 0.7 && r.sprint.hi <= 1.3 && r.sprint.kept, r.sprint);
 check(res, 'sprint: every touch on a footfall', r.sprint.touches > 0 && r.sprint.offStrike === 0, r.sprint);
 check(res, 'random stick 3×10s: never lost alone', r.random.lost === 0, { ...r.random, to: r.lostTo });
+check(res, 'gentle steer: ball follows the run within 0.35s (≤ 0.2 rad off), stays ≤ 0.9m', r.steer.ballVsRun <= 0.2 && r.steer.d <= 0.9, r.steer);
 check(res, 'cut 90° at sprint keeps it', r.cut90.kept);
 check(res, 'turn-back at sprint keeps it', r.turnBack.kept);
 check(res, 'idle keeps ball under the feet', r.idle.kept && r.idle.maxD <= 0.55, r.idle);
