@@ -1,6 +1,6 @@
 // Squad, economy and progression for ZorpFC: player database, the player's profile (coins, owned
 // players, starting XI, training levels), the transfer shop and match rewards. Saved in localStorage.
-import { FORMATION } from './config.js';
+import { FORMATIONS, posPenalty } from './config.js';
 
 // a: attributes 0..99 — pac, sho, pas, dri, def, phy, gk.  look: skin/hair indices + hair style.
 const P = (id, name, pos, num, look, a, extra = {}) => ({ id, name, pos, num, skin: look[0], hair: look[1], style: look[2], a, ...extra });
@@ -45,7 +45,6 @@ export const DB = {
 export const SHOP = ['petrov', 'kowal', 'nakamura', 'kessler', 'ijeoma', 'rocha', 'diallo', 'vandrecht', 'sorensen', 'abernathy',
   'benedetti', 'lavelle', 'osei', 'ferreira', 'hallstrom', 'okoro', 'maestro'];
 
-const SLOT_POS = FORMATION.map(f => f.role);
 const START = ['zorlov', 'okafor', 'brennan', 'halvorsen', 'tanaka', 'duarte', 'mbeki', 'vexley', 'silver', 'ronaldo', 'lindqvist'];
 const START_OWNED = [...START, 'kairo', 'zorp'];
 
@@ -64,7 +63,7 @@ const KEY = 'sb27.profile';
 let prof = null;
 
 function fresh() {
-  return { v: 1, coins: 3000, owned: START_OWNED.slice(), lineup: START.slice(), upgrades: {}, record: { w: 0, d: 0, l: 0 }, lastDaily: '' };
+  return { v: 1, coins: 3000, owned: START_OWNED.slice(), lineup: START.slice(), formation: '4-3-3', upgrades: {}, record: { w: 0, d: 0, l: 0 }, lastDaily: '' };
 }
 export function profile() {
   if (prof) return prof;
@@ -109,13 +108,39 @@ export function tier(id) {
   if (p.icon) return 'icon';
   return o >= 88 ? 'rare' : o >= 75 ? 'gold' : o >= 65 ? 'silver' : 'bronze';
 }
-export const slotPos = i => SLOT_POS[i];
-export const teamOvr = () => Math.round(profile().lineup.reduce((s, id) => s + ovr(id), 0) / 11);
+export const formationName = () => (FORMATIONS[profile().formation] ? profile().formation : '4-3-3');
+export const formation = () => FORMATIONS[formationName()];
+export const slotPos = i => formation()[i].role;
+// rating in a given slot (out of position costs points)
+export const slotOvr = (id, i) => Math.max(1, ovr(id) - posPenalty(DB[id].pos, slotPos(i)));
+export const teamOvr = () => Math.round(profile().lineup.reduce((s, id, i) => s + slotOvr(id, i), 0) / 11);
+
+// best-fit: put the current XI into the slots of a formation (natural positions first)
+function arrange(ids, f, pool = ids) {
+  const pairs = [];
+  const cur = new Set(ids);
+  // natural position first, then current starters, then rating
+  pool.forEach(id => f.forEach((sl, i) => pairs.push({ id, i, pen: posPenalty(DB[id].pos, sl.role), o: ovr(id) + (cur.has(id) ? 4 : 0) })));
+  pairs.sort((x, y) => x.pen - y.pen || y.o - x.o);
+  const out = new Array(f.length).fill(null), used = new Set();
+  for (const pr of pairs) if (!out[pr.i] && !used.has(pr.id)) { out[pr.i] = pr.id; used.add(pr.id); }
+  return out;
+}
+export function setFormation(name) {
+  if (!FORMATIONS[name]) return;
+  const pr = profile();
+  pr.formation = name;
+  pr.lineup = arrange(pr.lineup, FORMATIONS[name], pr.owned);
+  save();
+}
 
 // the starting XI in the format the match engine uses
 export function lineupForMatch() {
-  return profile().lineup.map(id => {
-    const p = DB[id], a = attrs(id);
+  return profile().lineup.map((id, i) => {
+    const p = DB[id], a0 = attrs(id);
+    // out of position: everything a little worse
+    const k = slotOvr(id, i) / ovr(id), a = {};
+    for (const key in a0) a[key] = a0[key] * k;
     return { name: p.name, num: p.num, skin: p.skin, hair: p.hair, style: p.style, st: { spd: a.pac / 100, pas: a.pas / 100, sho: a.sho / 100, dri: a.dri / 100, def: a.def / 100, gk: a.gk / 100, phy: a.phy / 100 }, id };
   });
 }

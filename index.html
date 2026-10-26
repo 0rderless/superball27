@@ -112,7 +112,7 @@
       <div class="hub-col">
         <button class="tile tile-team" id="team-tile">
           <div class="tt-ovr"><b id="team-ovr">80</b><small>TEAM OVR</small></div>
-          <div class="tt-info"><b>ZorpFC</b><small>4-3-3 · <span id="team-record">0W 0D 0L</span></small><div class="tt-stars" id="team-stars"></div></div>
+          <div class="tt-info"><b>ZorpFC</b><small><span id="team-form">4-3-3</span> · <span id="team-record">0W 0D 0L</span></small><div class="tt-stars" id="team-stars"></div></div>
         </button>
         <div class="tile tile-quick">
           <div class="q-row" data-quick="difficulty"><label>Difficulty</label><div class="seg"></div></div>
@@ -128,6 +128,7 @@
     <main class="page hidden" id="page-squad">
       <div class="pitch" id="pitch"></div>
       <aside class="squad-side">
+        <div class="form-pick" id="form-pick"></div>
         <div class="squad-detail" id="squad-detail"></div>
         <div class="bench-head"><b>RESERVES</b><small>Tap a player on the pitch, then a reserve to swap</small></div>
         <div class="bench" id="bench"></div>
@@ -163,13 +164,15 @@
     <div class="pm-art"></div>
     <div class="pm-shade"></div>
     <div class="pm-head"><span>SUPERBALL 27</span><b>QUICK MATCH</b></div>
-    <div class="pm-teams">
-      <div class="pm-team pm-home"><div class="crest crest-home big"><span>Z</span></div><div class="pm-name">ZorpFC</div><div class="pm-sub" id="pm-home-sub">HOME</div></div>
+    <div class="pm-top">
+      <div class="pm-club"><div class="crest crest-home"><span>Z</span></div><div><b>ZorpFC</b><small id="pm-home-sub">HOME</small></div></div>
       <div class="pm-vs"><b>VS</b><small>SUPERBALL ARENA · 20:45</small></div>
-      <div class="pm-team pm-away"><div class="crest-slot big" id="pm-away-crest"></div><div class="pm-name" id="pm-away-name">Opponent</div><div class="pm-sub" id="pm-away-sub">AWAY</div></div>
+      <div class="pm-club away"><div><b id="pm-away-name">Opponent</b><small id="pm-away-sub">AWAY</small></div><div class="crest-slot" id="pm-away-crest"></div></div>
     </div>
+    <div class="lineup-pitch" id="lineup-pitch"></div>
     <div class="pm-foot">
       <div class="pm-tip" id="pm-tip"></div>
+      <div class="pm-go" id="pm-go">TAP TO KICK OFF</div>
       <div class="load-bar"><i id="pm-fill"></i></div>
       <div class="pm-studio">ONTRONOP GAMES</div>
     </div>

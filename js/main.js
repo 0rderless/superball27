@@ -5,10 +5,10 @@ import { loadPlayerAssets } from './model.js';
 import { Commentary } from './commentary.js';
 import { Input } from './input.js';
 import { Sound } from './audio.js';
-import { F, DIFFICULTY, DIFF_KEYS, TEAMS } from './config.js';
+import { F, DIFFICULTY, DIFF_KEYS, TEAMS, FORMATIONS } from './config.js';
 import { CLUBS, teamConfig, crestSVG } from './clubs.js';
 import * as SQ from './squad.js';
-import { card, clubCard } from './cards.js';
+import { card, clubCard, avatar } from './cards.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -169,6 +169,7 @@ function newMatch() {
   if (!assetsReady) return;
   if (match) match.dispose();
   TEAMS.home.players = SQ.lineupForMatch(); // your starting XI from Squad
+  TEAMS.home.formation = SQ.formationName();
   TEAMS.away = teamConfig(opponent);
   match = new Match(scene, sound, settings, hooks);
   match.diff = effDiff();
@@ -198,8 +199,6 @@ function syncOpponentUI() {
   $('pp-a').style.color = kitCol === '#f4f4f4' || kitCol === '#f2f2f2' ? '#e8e8e8' : opponent.color;
   $('pm-away-crest').innerHTML = crestSVG(opponent);
   $('pm-away-name').textContent = opponent.name;
-  $('pm-away-sub').textContent = `AWAY · OVR ${opponent.ovr}`;
-  $('pm-home-sub').textContent = `HOME · OVR ${SQ.teamOvr()}`;
   $('ft-away-crest').innerHTML = crestSVG(opponent);
   $('ft-away-name').textContent = opponent.name;
 }
@@ -306,6 +305,7 @@ function syncMenu() {
   const pr = SQ.profile();
   $('team-ovr').textContent = SQ.teamOvr();
   $('team-record').textContent = `${pr.record.w}W ${pr.record.d}D ${pr.record.l}L`;
+  $('team-form').textContent = SQ.formationName();
   $('team-stars').innerHTML = pr.lineup.filter(id => SQ.DB[id].star).map(id => `<span>${SQ.DB[id].name} ${SQ.ovr(id)}</span>`).join('');
   updateCoins();
 }
@@ -342,18 +342,26 @@ function toast(msg, icon = 'check') {
 const coin = n => `<svg class="ico"><use href="#i-coin"/></svg>${n.toLocaleString('en-US')}`;
 
 // squad: pitch (attacking to the right) + reserves + player detail
-const SLOT_XY = [[8, 50], [30, 14], [24, 37], [24, 63], [30, 86], [53, 26], [46, 50], [53, 74], [79, 16], [86, 50], [79, 84]];
+// pitch position (%) of a formation slot, attacking to the right
+const slotXY = sl => [6 + sl.a / 0.72 * 82, 50 + sl.c * 38];
+const FORMATION_NAMES = ['4-3-3', '4-4-2', '4-2-3-1', '4-1-2-1-2', '3-5-2', '3-4-3', '5-3-2'];
 let selSlot = null, selBench = null;
 function renderSquad() {
   const pr = SQ.profile();
   const pitch = $('pitch');
-  pitch.innerHTML = pr.lineup.map((id, i) => `<button class="slot${selSlot === i ? ' sel' : ''}${selSlot !== null && selSlot !== i ? ' swap-target' : ''}" data-slot="${i}" style="left:${SLOT_XY[i][0]}%;top:${SLOT_XY[i][1]}%">${card(id, { mini: true })}<span class="pos-tag">${SQ.slotPos(i)}</span></button>`).join('');
+  const form = SQ.formation();
+  $('form-pick').innerHTML = FORMATION_NAMES.map(f => `<button data-form="${f}" class="${f === SQ.formationName() ? 'on' : ''}">${f}</button>`).join('');
+  pitch.innerHTML = pr.lineup.map((id, i) => {
+      const [x, y] = slotXY(form[i]);
+      const pen = SQ.ovr(id) - SQ.slotOvr(id, i);
+      return `<button class="slot${selSlot === i ? ' sel' : ''}${selSlot !== null && selSlot !== i ? ' swap-target' : ''}" data-slot="${i}" style="left:${x}%;top:${y}%">${card(id, { mini: true })}<span class="pos-tag${pen ? ' oop' : ''}">${SQ.slotPos(i)}${pen ? ` −${pen}` : ''}</span></button>`;
+    }).join('');
   const bench = pr.owned.filter(id => !pr.lineup.includes(id)).sort((a, b) => SQ.ovr(b) - SQ.ovr(a));
   $('bench').innerHTML = bench.length ? bench.map(id => `<button class="bench-card${selBench === id ? ' sel' : ''}" data-id="${id}">${card(id, { mini: true })}</button>`).join('') : '<div class="empty-bench">No reserves — sign players in the Shop.</div>';
   const focus = selBench || (selSlot !== null ? pr.lineup[selSlot] : null);
   const det = $('squad-detail');
   if (!focus) {
-    det.innerHTML = `<div class="sd-empty"><b>ZorpFC · ${SQ.teamOvr()} OVR</b><span>Tap a player to see his card and upgrade his attributes — pace, shooting, passing and more.</span><span>Tap two players on the pitch to swap positions, or a player then a reserve to substitute.</span></div>`;
+    det.innerHTML = `<div class="sd-empty"><b>ZorpFC · ${SQ.formationName()} · ${SQ.teamOvr()} OVR</b><span>Tap a player to see his card and upgrade his attributes — pace, shooting, passing and more.</span><span>Tap two players on the pitch to swap positions, or a player then a reserve to substitute.</span></div>`;
     return;
   }
   const p = SQ.DB[focus], a = SQ.attrs(focus);
@@ -374,6 +382,13 @@ function renderSquad() {
     }
   }));
 }
+$('form-pick').addEventListener('click', e => {
+  const f = e.target.closest('[data-form]');
+  if (!f) return;
+  SQ.setFormation(f.dataset.form); selSlot = null; selBench = null;
+  toast(`Formation: ${f.dataset.form} · ${SQ.teamOvr()} OVR`, 'shirt');
+  renderSquad(); syncMenu();
+});
 $('pitch').addEventListener('click', e => {
   const b = e.target.closest('.slot');
   if (!b) return;
@@ -482,6 +497,33 @@ async function startMatchmaking() {
 $('mm-cancel').addEventListener('click', () => { mmToken++; goMenu(); });
 
 // ---------------------------------------------------------------- pre-match loading (matchup screen)
+function renderLineups() {
+  const el = $('lineup-pitch');
+  const homeF = SQ.formation(), pr = SQ.profile();
+  const away = teamConfig(opponent);
+  const awayF = FORMATIONS[away.formation] || FORMATIONS['4-3-3'];
+  const ink = hex => { const n = parseInt(hex.slice(1), 16); return ((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) > 165 ? '#111' : '#fff'; };
+  const pos = (sl, mirror) => {
+    const x = 4 + sl.a / 0.72 * 42, y = 50 + sl.c * 40;
+    return mirror ? [100 - x, 100 - y] : [x, y];
+  };
+  let html = '', k = 0;
+  pr.lineup.forEach((id, i) => {
+    const p = SQ.DB[id], [x, y] = pos(homeF[i], false);
+    html += `<div class="lu${p.star ? ' star' : ''}" style="left:${x}%;top:${y}%;--ring:#2a6bff;animation-delay:${(k++) * 40}ms"><div class="lu-face">${avatar(p)}</div><span class="lu-num">${p.num}</span><b>${p.name.split(' ').slice(-1)[0]}</b></div>`;
+  });
+  away.players.forEach((p, i) => {
+    const [x, y] = pos(awayF[i], true);
+    html += `<div class="lu" style="left:${x}%;top:${y}%;--ring:${away.kit.shirt};--ringInk:${ink(away.kit.shirt)};animation-delay:${(k++) * 40}ms"><div class="lu-face">${avatar(p, away.kit.shirt, away.kit.trim)}</div><span class="lu-num">${p.num}</span><b>${p.name}</b></div>`;
+  });
+  el.innerHTML = html;
+  $('pm-home-sub').textContent = `${SQ.formationName()} · OVR ${SQ.teamOvr()}`;
+  $('pm-away-name').textContent = opponent.name;
+  $('pm-away-sub').textContent = `${away.formation} · OVR ${opponent.ovr}`;
+  $('pm-away-crest').innerHTML = crestSVG(opponent);
+}
+
+let pmContinue = null;
 async function startPrematch() {
   state = 'prematch';
   sound.init();
@@ -489,49 +531,66 @@ async function startPrematch() {
   commentary.stop();
   requestFullscreen();
   requestWakeLock();
+  const pm = $('prematch');
+  pm.classList.remove('ready');
+  renderLineups();
   showScreen('prematch');
-  // restart the slide-in animations
-  for (const el of $('prematch').querySelectorAll('.pm-home, .pm-away, .pm-vs')) { el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; }
+  for (const el of pm.querySelectorAll('.pm-club, .pm-vs, .lineup-pitch')) { el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; }
   $('pm-tip').textContent = tip();
   const fill = $('pm-fill');
   fill.style.transition = 'none'; fill.style.width = '0%'; void fill.offsetWidth; fill.style.transition = '';
   const t0 = performance.now();
   fill.style.width = '25%';
-  await wait(250);
+  await wait(350);
   applyGraphics();
   newMatch();
   fill.style.width = '60%';
   await nextFrame();
   renderer.compile(scene, camera);
-  fill.style.width = '85%';
-  sound.applause();
-  await wait(Math.max(0, 2300 - (performance.now() - t0)));
   fill.style.width = '100%';
-  await wait(250);
+  sound.applause();
+  if (state !== 'prematch') return;
+  // lineups stay up until you tap (or a few seconds pass)
+  pm.classList.add('ready');
+  await new Promise(res => {
+    pmContinue = res;
+    setTimeout(res, Math.max(2500, 6500 - (performance.now() - t0)));
+  });
+  pmContinue = null;
   if (state !== 'prematch') return;
   ui.fade.classList.add('on');
   await wait(260);
   startIntro();
   ui.fade.classList.remove('on');
 }
+$('prematch').addEventListener('pointerup', () => { if (pmContinue && $('prematch').classList.contains('ready')) pmContinue(); });
 
 function startIntro() {
   input.reset();
   state = 'intro';
   introT = 0;
   match.phase = 'intro';
+  match.lineupPose();
   showScreen(null);
   ui.controls.classList.add('hidden');
   hooks.hint('');
   hooks.banner('ZorpFC', `vs  ${opponent.name}`, 2600, 'home');
 }
 
+let kickoffPending = false;
 function beginKickoff() {
-  state = 'game';
-  ui.controls.classList.remove('hidden');
-  match.startMatch();
-  camSnap = true;
+  if (kickoffPending) return;
+  kickoffPending = true;
+  hooks.fade(() => {
+    kickoffPending = false;
+    if (state !== 'intro') return;
+    state = 'game';
+    ui.controls.classList.remove('hidden');
+    match.startMatch();
+    camSnap = true;
+  });
 }
+const INTRO_DUR = 5.4;
 
 function showResult() {
   if (!match || state === 'menu') return;
@@ -776,12 +835,18 @@ function updateCamera(dt) {
   const c = { ...base, h: base.h * zk, back: base.back * zk };
   setFov(c.fov);
   if (state === 'intro') {
-    const t = clamp(introT / 3.4, 0, 1);
-    const e = t * t * (3 - 2 * t);
-    const a = -0.9 + e * 0.9;
-    const r = 75 - e * (75 - c.back);
-    camera.position.set(Math.sin(a) * r * 1.2, 34 - e * (34 - c.h), Math.cos(a) * r);
-    camera.lookAt(0, 0, 0);
+    // walk-out: low tracking shot along the two lines, then rise to the match camera
+    const t = clamp(introT / INTRO_DUR, 0, 1);
+    if (t < 0.72) {
+      const u = t / 0.72, e = u * u * (3 - 2 * u);
+      const x = -11 + e * 22;
+      camera.position.set(x, 1.65, 8.6);
+      camera.lookAt(x * 0.92, 1.25, 2.2);
+    } else {
+      const u = (t - 0.72) / 0.28, e = u * u * (3 - 2 * u);
+      camera.position.set(11 * (1 - e), 1.65 + e * (c.h - 1.65), 8.6 + e * (c.back - 8.6));
+      camera.lookAt(10 * (1 - e), 1.25 * (1 - e) + 0.4 * e, 2.2 * (1 - e));
+    }
     camTarget.set(0, 0, 0);
     camLook.set(0, 0, 0);
     return;
@@ -942,7 +1007,7 @@ function frame(now) {
   input.update(dt);
   if (state === 'intro') {
     introT += dt;
-    if (introT > 3.4) beginKickoff();
+    if (introT > INTRO_DUR) beginKickoff();
   }
   if (match && (state === 'game' || state === 'intro' || state === 'menu' || state === 'result' || state === 'title')) match.update(dt, input);
   if (stadium) {
@@ -972,4 +1037,5 @@ window.__sb27 = {
   get match() { return match; }, get state() { return state; }, input, camera, renderer, settings,
   get stadium() { return stadium; }, skipIntro() { introT = 99; }, startGame: () => startPrematch(), setSetting,
   skipBoot() { if (state === 'title') { sound.init(); goMenu(); } },
+  showLineups() { renderLineups(); showScreen('prematch'); $('prematch').classList.add('ready'); },
 };

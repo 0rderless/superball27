@@ -32,15 +32,19 @@ L through / Y lobbed through, Shift sprint, E skill, P pause.
 - 6 cameras (Close, Broadcast, Wide, Tele, Dynamic, Pro end-to-end) — switch from the pause menu
 - Ontronop Games studio intro, title loading screen, eFootball-style pre-match screen, settings for gameplay / camera / audio / graphics / controls
 - Live spoken commentary (browser speech), crowd chants, air horns, net sounds
-- Team AI in a 4-3-3: pressing, jockeying, cover, marking, runs in behind, crosses, keeper positioning and saves
+- FC-style ball physics: the ball is a real object knocked ahead with each touch (bigger touches when sprinting, tighter for good dribblers); sharp cuts push the ball into the turn, a turn-back plants the sole and drags it round; spin in circles at speed and you lose it
+- Momentum-based movement: players accelerate, brake and plant to change direction instead of spinning on the spot
+- 7 formations (4-3-3, 4-4-2, 4-2-3-1, 4-1-2-1-2, 3-5-2, 3-4-3, 5-3-2) for you and every club, with out-of-position penalties
+- Pre-match line-ups on a pitch showing both formations, then a walk-out with both teams lined up at the halfway line
+- Team AI: pressing, jockeying, cover, marking, runs in behind, crosses, keeper positioning and saves. Defenders hold a line and step up instead of camping in the box, and only block shots that hit them
 - Corners, throw-ins, goal kicks, kick-offs, half time, full-time stats
-- 3 difficulties, 4/6/10 minute matches, 3 camera distances, Smooth/HD graphics, assists on/off
+- 5 difficulties (Beginner to Legend), 4/6/10 minute matches, 3 camera distances, Smooth/HD graphics, assists on/off
 
 ## Matchmaking
 Find Match pairs you against one of 11 AI clubs — Real Madrid, Manchester City, Bayern Munich, Liverpool, PSG, Arsenal, Inter Milan, Chelsea, Juventus, AC Milan, Manchester United — using their real names and kit colours (crests are generic shields; squads are generated). Stronger clubs play harder. Five difficulties: Beginner, Amateur, Pro, Elite, Legend.
 
 ## Squad, shop & progression
-- **Squad**: drag-free tap-to-swap on a 4-3-3 pitch; reserves bench; FC-style player cards with tiers (bronze/silver/gold/rare/icon/superstar).
+- **Squad**: drag-free tap-to-swap on the pitch in your chosen formation; reserves bench; FC-style player cards with tiers (bronze/silver/gold/rare/icon/superstar).
 - **Stars**: Ronaldo (ST, 99) and Germain Silver (LW, 99) start for ZorpFC.
 - **Shop**: 17 players to sign with coins; daily 750-coin reward.
 - **Attribute upgrades**: train Pace, Shooting, Passing, Dribbling, Defending, Physical (or Goalkeeping) individually, up to +10 each.

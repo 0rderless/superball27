@@ -574,3 +574,39 @@ svg { display: block; }
 .attr button { height: 20px; font-size: 11.5px; }
 .sd-info h3 { font-size: 16px; }
 .sd-info .sub { font-size: 12px; }
+
+/* formation picker + out-of-position tags */
+.form-pick { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 11px; background: var(--glass); border: 1px solid var(--line); }
+.form-pick button { flex: 1; }
+.form-pick button { padding: 3px 7px; border-radius: 7px; font-weight: 700; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.form-pick button.on { background: linear-gradient(180deg, #3b7bff, #1f4fd6); color: #fff; }
+.slot .pos-tag.oop { background: #c3141c; }
+
+/* ================= pre-match lineups ================= */
+.pm-head { top: calc(8px + var(--st)); }
+.pm-top { position: absolute; top: calc(26px + var(--st)); left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: clamp(14px, 6vw, 70px); }
+.pm-club { display: flex; align-items: center; gap: 10px; animation: slideL .6s cubic-bezier(.2,.9,.3,1) both; }
+.pm-club.away { animation-name: slideR; text-align: right; }
+.pm-club b { display: block; font-family: var(--display); font-size: clamp(17px, 5vh, 26px); white-space: nowrap; }
+.pm-club small { font-weight: 700; letter-spacing: 1.5px; font-size: 12px; color: var(--gold); }
+.pm-club .crest { width: 44px; font-size: 21px; }
+.pm-club .crest-slot .club-crest { width: 46px; height: 46px; }
+.pm-vs b { font-size: clamp(26px, 8vh, 42px); }
+.lineup-pitch { position: absolute; left: max(3vw, calc(50% - 450px)); right: max(3vw, calc(50% - 450px)); top: calc(84px + var(--st)); bottom: calc(66px + var(--sb));
+  border-radius: 14px; border: 1px solid rgba(255,255,255,.18); overflow: hidden;
+  background: repeating-linear-gradient(90deg, rgba(40,140,60,.55) 0 5%, rgba(34,120,52,.55) 5% 10%); box-shadow: inset 0 0 50px rgba(0,0,0,.5); animation: rise .5s ease .15s both; }
+.lineup-pitch::before { content: ''; position: absolute; inset: 5% 2.5%; border: 2px solid rgba(255,255,255,.35); border-radius: 3px;
+  background: linear-gradient(90deg, transparent calc(50% - 1px), rgba(255,255,255,.35) calc(50% - 1px), rgba(255,255,255,.35) calc(50% + 1px), transparent calc(50% + 1px)); }
+.lineup-pitch::after { content: ''; position: absolute; left: 50%; top: 50%; height: 30%; aspect-ratio: 1; transform: translate(-50%, -50%); border: 2px solid rgba(255,255,255,.35); border-radius: 50%; }
+.lu { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; z-index: 1; animation: luIn .45s cubic-bezier(.2,1.4,.4,1) both; }
+@keyframes luIn { from { opacity: 0; transform: translate(-50%, -30%) scale(.6); } }
+.lu-face { position: relative; width: clamp(26px, 8.5vh, 40px); height: clamp(26px, 8.5vh, 40px); border-radius: 50%; overflow: hidden; background: #0b1530; border: 2px solid var(--ring, #3b7bff); box-shadow: 0 3px 8px rgba(0,0,0,.5); }
+.lu-face svg { width: 120%; height: 120%; margin: -6% 0 0 -10%; }
+.lu-num { position: absolute; right: -6px; top: -4px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 8px; font: 700 10px/16px var(--ui); text-align: center; background: var(--ring, #3b7bff); color: var(--ringInk, #fff); }
+.lu b { margin-top: 2px; font-weight: 700; font-size: clamp(9px, 2.6vh, 12px); white-space: nowrap; padding: 0 5px; border-radius: 4px; background: rgba(4,10,26,.78); }
+.lu.star .lu-face { box-shadow: 0 0 0 2px #ffd23f, 0 0 12px rgba(255,210,63,.7); }
+.pm-foot { bottom: calc(10px + var(--sb)); }
+.pm-tip { margin-bottom: 6px; font-size: 13px; }
+.pm-go { display: none; font-family: var(--display); letter-spacing: 3px; font-size: 14px; margin-bottom: 6px; animation: pulse 1.2s infinite; }
+#prematch.ready .pm-go { display: block; }
+#prematch.ready .pm-tip { display: none; }

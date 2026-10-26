@@ -25,28 +25,44 @@ export const DIFFICULTY = {
 };
 export const DIFF_KEYS = ['beginner', 'amateur', 'pro', 'elite', 'legend'];
 
-// 4-3-3. a = 0 own goal line .. 1 opponent goal line, c = -1 left .. +1 right (facing attack).
-export const FORMATION = [
-  { role: 'GK', a: 0.02, c: 0 },
-  { role: 'LB', a: 0.24, c: -0.70 },
-  { role: 'CB', a: 0.19, c: -0.25 },
-  { role: 'CB', a: 0.19, c: 0.25 },
-  { role: 'RB', a: 0.24, c: 0.70 },
-  { role: 'CM', a: 0.42, c: -0.38 },
-  { role: 'DM', a: 0.34, c: 0 },
-  { role: 'CM', a: 0.42, c: 0.38 },
-  { role: 'LW', a: 0.64, c: -0.72 },
-  { role: 'ST', a: 0.68, c: 0 },
-  { role: 'RW', a: 0.64, c: 0.72 },
-];
+// Formations. a = 0 own goal line .. 1 opponent goal line, c = -1 left .. +1 right (facing attack).
+// Slot 0 is always the goalkeeper.
+const S = (role, a, c) => ({ role, a, c });
+const GK = S('GK', 0.02, 0);
+const BACK4 = [S('LB', 0.24, -0.70), S('CB', 0.19, -0.25), S('CB', 0.19, 0.25), S('RB', 0.24, 0.70)];
+const BACK3 = [S('CB', 0.18, -0.42), S('CB', 0.16, 0), S('CB', 0.18, 0.42)];
+export const FORMATIONS = {
+  '4-3-3': [GK, ...BACK4, S('CM', 0.42, -0.38), S('DM', 0.34, 0), S('CM', 0.42, 0.38), S('LW', 0.64, -0.72), S('ST', 0.68, 0), S('RW', 0.64, 0.72)],
+  '4-4-2': [GK, ...BACK4, S('LM', 0.45, -0.74), S('CM', 0.40, -0.22), S('CM', 0.40, 0.22), S('RM', 0.45, 0.74), S('ST', 0.67, -0.18), S('ST', 0.67, 0.18)],
+  '4-2-3-1': [GK, ...BACK4, S('DM', 0.33, -0.22), S('DM', 0.33, 0.22), S('LW', 0.56, -0.70), S('CAM', 0.53, 0), S('RW', 0.56, 0.70), S('ST', 0.69, 0)],
+  '4-1-2-1-2': [GK, ...BACK4, S('DM', 0.31, 0), S('CM', 0.42, -0.34), S('CM', 0.42, 0.34), S('CAM', 0.53, 0), S('ST', 0.67, -0.17), S('ST', 0.67, 0.17)],
+  '3-5-2': [GK, ...BACK3, S('LWB', 0.40, -0.82), S('CM', 0.39, -0.26), S('DM', 0.31, 0), S('CM', 0.39, 0.26), S('RWB', 0.40, 0.82), S('ST', 0.67, -0.18), S('ST', 0.67, 0.18)],
+  '3-4-3': [GK, ...BACK3, S('LM', 0.43, -0.76), S('CM', 0.38, -0.22), S('CM', 0.38, 0.22), S('RM', 0.43, 0.76), S('LW', 0.64, -0.62), S('ST', 0.69, 0), S('RW', 0.64, 0.62)],
+  '5-3-2': [GK, S('LWB', 0.27, -0.80), S('CB', 0.17, -0.40), S('CB', 0.15, 0), S('CB', 0.17, 0.40), S('RWB', 0.27, 0.80), S('CM', 0.40, -0.32), S('DM', 0.35, 0), S('CM', 0.40, 0.32), S('ST', 0.65, -0.18), S('ST', 0.65, 0.18)],
+};
+export const FORMATION = FORMATIONS['4-3-3'];
 
-// Kick-off shape (all inside own half).
-export const KICKOFF = [
-  { a: 0.02, c: 0 },
-  { a: 0.20, c: -0.70 }, { a: 0.16, c: -0.25 }, { a: 0.16, c: 0.25 }, { a: 0.20, c: 0.70 },
-  { a: 0.34, c: -0.38 }, { a: 0.28, c: 0 }, { a: 0.34, c: 0.38 },
-  { a: 0.45, c: -0.70 }, { a: 0.47, c: 0 }, { a: 0.45, c: 0.70 },
-];
+// kick-off shape for any formation: everyone back inside their own half
+export const kickoffShape = f => f.map(s => ({ a: s.role === 'GK' ? 0.02 : Math.min(0.47, 0.05 + s.a * 0.66), c: s.c }));
+export const KICKOFF = kickoffShape(FORMATION);
+
+// role groups
+export const ROLE_GROUP = {
+  GK: 'gk', CB: 'def', LB: 'def', RB: 'def', LWB: 'def', RWB: 'def',
+  DM: 'mid', CM: 'mid', CAM: 'mid', LM: 'mid', RM: 'mid', LW: 'att', RW: 'att', ST: 'att',
+};
+// positions a player can cover without a big drop-off
+export const POS_COMPAT = {
+  GK: [], CB: ['DM'], LB: ['LWB', 'LM'], RB: ['RWB', 'RM'], LWB: ['LB', 'LM'], RWB: ['RB', 'RM'],
+  DM: ['CM', 'CB'], CM: ['DM', 'CAM'], CAM: ['CM', 'ST'], LM: ['LW', 'LWB', 'LB'], RM: ['RW', 'RWB', 'RB'],
+  LW: ['LM', 'ST', 'RW'], RW: ['RM', 'ST', 'LW'], ST: ['CAM', 'LW', 'RW'],
+};
+// rating penalty for playing someone in a slot
+export function posPenalty(natural, slot) {
+  if (natural === slot) return 0;
+  if (natural === 'GK' || slot === 'GK') return 45;
+  return (POS_COMPAT[natural] || []).includes(slot) ? 3 : 10;
+}
 
 const s = (spd, pas, sho, dri, def, gk = 0.3) => ({ spd, pas, sho, dri, def, gk });
 
