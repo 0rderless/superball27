@@ -353,6 +353,7 @@ function updateHUD() {
     ui.power.style.left = ((projV.x + 1) / 2 * window.innerWidth) + 'px';
     ui.power.style.top = ((1 - projV.y) / 2 * window.innerHeight) + 'px';
     ui.powerFill.style.width = Math.round(c.charge * 100) + '%';
+    ui.power.classList.toggle('chip', !!c.chipping);
   } else ui.power.style.display = 'none';
 
   drawRadar();

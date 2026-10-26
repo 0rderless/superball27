@@ -6,7 +6,8 @@ export class Input {
     this.move = { x: 0, y: 0 };
     this.mag = 0;
     this.b = {};
-    for (const k of BTN) this.b[k] = { down: false, pressed: false, released: false, held: 0 };
+    // fire: the action triggers (tap on release, or the moment you flick up); fireType 'tap' | 'up'
+    for (const k of BTN) this.b[k] = { down: false, pressed: false, released: false, held: 0, fire: false, fireType: 'tap', flick: false, fired: false, sx: 0, sy: 0 };
     this.keys = new Set();
     this.joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
     this.touchMode = false;
@@ -65,28 +66,54 @@ export class Input {
         this.touchMode = true;
         el.setPointerCapture(e.pointerId);
         ids.add(e.pointerId);
-        if (!st.down) { st.down = true; st.pressed = true; st.held = 0; }
+        if (!st.down) { st.down = true; st.pressed = true; st.held = 0; st.flick = false; st.fired = false; st.sx = e.clientX; st.sy = e.clientY; }
         el.classList.add('down');
         if (navigator.vibrate) try { navigator.vibrate(8); } catch (_) { /* ignore */ }
+      });
+      el.addEventListener('pointermove', e => {
+        if (!ids.has(e.pointerId) || !st.down || st.flick) return;
+        const dx = e.clientX - st.sx, dy = e.clientY - st.sy;
+        if (dy < -22 && -dy > Math.abs(dx) * 0.8) {
+          // flick up: high pass / lob through / chip shot
+          st.flick = true;
+          el.classList.add('flicked');
+          setTimeout(() => el.classList.remove('flicked'), 350);
+          if (navigator.vibrate) try { navigator.vibrate(15); } catch (_) { /* ignore */ }
+          if (k === 'pass' || k === 'through') { st.fire = true; st.fireType = 'up'; st.fired = true; }
+        }
       });
       const up = e => {
         if (!ids.has(e.pointerId)) return;
         ids.delete(e.pointerId);
-        if (ids.size === 0 && st.down) { st.down = false; st.released = true; el.classList.remove('down'); }
+        if (ids.size === 0 && st.down) {
+          st.down = false; st.released = true; el.classList.remove('down');
+          if (!st.fired) { st.fire = true; st.fireType = st.flick ? 'up' : 'tap'; st.fired = true; }
+        }
       };
       el.addEventListener('pointerup', up);
       el.addEventListener('pointercancel', up);
       el.addEventListener('lostpointercapture', up);
     });
 
+    // U = high pass, Y = lofted through ball, O = chip shot (hold for power)
     const map = {
-      Space: 'pass', KeyJ: 'pass', KeyK: 'shoot', KeyL: 'through', ShiftLeft: 'sprint', ShiftRight: 'sprint', KeyI: 'skill', KeyE: 'skill',
+      Space: 'pass', KeyJ: 'pass', KeyU: 'pass', KeyK: 'shoot', KeyO: 'shoot', KeyL: 'through', KeyY: 'through',
+      ShiftLeft: 'sprint', ShiftRight: 'sprint', KeyI: 'skill', KeyE: 'skill',
     };
+    const highKeys = new Set(['KeyU', 'KeyO', 'KeyY']);
     window.addEventListener('keydown', e => {
       if (e.repeat) return;
       this.keys.add(e.code);
       const k = map[e.code];
-      if (k) { e.preventDefault(); const st = this.b[k]; if (!st.down) { st.down = true; st.pressed = true; st.held = 0; } }
+      if (k) {
+        e.preventDefault();
+        const st = this.b[k];
+        if (!st.down) {
+          st.down = true; st.pressed = true; st.held = 0;
+          st.flick = highKeys.has(e.code);
+          st.fire = true; st.fireType = st.flick ? 'up' : 'tap'; st.fired = true;
+        }
+      }
     });
     window.addEventListener('keyup', e => {
       this.keys.delete(e.code);
@@ -107,7 +134,7 @@ export class Input {
   }
 
   reset() {
-    for (const k of BTN) Object.assign(this.b[k], { down: false, pressed: false, released: false, held: 0 });
+    for (const k of BTN) Object.assign(this.b[k], { down: false, pressed: false, released: false, held: 0, fire: false, flick: false, fired: false });
     this.keys.clear();
     this.joy.id = null;
     this.base.classList.remove('active');
@@ -136,6 +163,6 @@ export class Input {
   }
 
   endFrame() {
-    for (const k of BTN) { this.b[k].pressed = false; this.b[k].released = false; }
+    for (const k of BTN) { this.b[k].pressed = false; this.b[k].released = false; this.b[k].fire = false; }
   }
 }

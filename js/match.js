@@ -358,8 +358,9 @@ export class Match {
     if (this.phase === 'restart' && r) {
       if (r.team === team && r.taker === p) {
         if (mag > 0.2) r.aim.copy(wdir);
-        if (r.ready && (B.pass.pressed || B.through.pressed || B.shoot.pressed)) {
-          this.takeRestart(B.through.pressed ? 'through' : B.shoot.pressed ? 'long' : 'ground');
+        if (r.ready && (B.pass.fire || B.through.fire || B.shoot.pressed)) {
+          // tap PASS = short/low, flick PASS up (or SHOOT) = long/high, THROUGH = short pass into space
+          this.takeRestart(B.through.fire ? 'through' : (B.shoot.pressed || B.pass.fireType === 'up') ? 'long' : 'ground');
         }
         return;
       }
@@ -392,11 +393,19 @@ export class Match {
     const nearFree = free && p.cool <= 0 && hdist(p.pos, ball.pos) < 1.6 && ball.pos.y < 1.3;
     const aim = mag > 0.2 ? wdir : p.fwd.clone();
     this._userAim = aim;
+    const ourFlight = free && this.lastKick.team === team && this.lastKick.kind !== 'shot';
+    const attackCtx = hasBall || nearFree || ourFlight;
+    // remember what a press meant when it started (so a SWITCH press can't turn into a pass)
+    if (B.pass.pressed) this._passCtx = attackCtx;
+    if (B.through.pressed) this._thruCtx = attackCtx;
+    const passFire = B.pass.fire && this._passCtx !== false;
+    const thruFire = B.through.fire && this._thruCtx !== false;
+    const passHeight = passFire ? (B.pass.fireType === 'up' ? 'high' : 'low') : (B.through.fireType === 'up' ? 'high' : 'low');
 
     if (hasBall || nearFree) {
-      if (B.pass.pressed || B.through.pressed) {
+      if (passFire || thruFire) {
         if (nearFree) this.gainBall(p, false, true);
-        this.pass(p, aim, B.through.pressed ? 'through' : 'ground', nearFree);
+        this.pass(p, aim, thruFire && !passFire ? 'through' : 'ground', nearFree, passHeight);
         return;
       }
       if (hasBall && B.skill.pressed) { this.skillMove(p, mag > 0.2 ? wdir : null); return; }
@@ -409,9 +418,10 @@ export class Match {
         if (B.shoot.pressed) { p.charging = true; p.charge = 0; }
         if (p.charging) {
           p.charge = Math.min(1, p.charge + dt / 0.8);
+          p.chipping = B.shoot.flick;
           if (!B.shoot.down) {
             p.charging = false;
-            this.shoot(p, Math.max(0.25, p.charge), mag > 0.2 ? wdir : null);
+            this.shoot(p, Math.max(0.25, p.charge), mag > 0.2 ? wdir : null, false, B.shoot.flick);
           }
         }
         return;
@@ -420,10 +430,9 @@ export class Match {
     p.charging = false;
 
     // one-touch: queue a pass/shot while our pass is on its way
-    const ourFlight = free && this.lastKick.team === team && this.lastKick.kind !== 'shot';
     if (p.queued) { p.queued.t -= dt; if (p.queued.t <= 0) p.queued = null; }
-    if (ourFlight && (B.pass.pressed || B.through.pressed || B.shoot.pressed)) {
-      p.queued = { kind: B.shoot.pressed ? 'shoot' : B.through.pressed ? 'through' : 'ground', t: 1.2, aim: mag > 0.2 ? wdir.clone() : null };
+    if (ourFlight && (passFire || thruFire || B.shoot.pressed)) {
+      p.queued = { kind: B.shoot.pressed ? 'shoot' : thruFire && !passFire ? 'through' : 'ground', height: passHeight, t: 1.2, aim: mag > 0.2 ? wdir.clone() : null };
       this.hooks.event(B.shoot.pressed ? 'FIRST-TIME SHOT' : 'ONE-TOUCH');
       return;
     }
@@ -564,11 +573,12 @@ export class Match {
     return best;
   }
 
-  pass(p, aim, type, firstTime = false) {
-    this.passTo(p, this.passTarget(p, aim, type), aim, type, firstTime);
+  pass(p, aim, type, firstTime = false, height = null) {
+    this.passTo(p, this.passTarget(p, aim, type), aim, type, firstTime, height);
   }
 
-  passTo(p, m, aim, type, firstTime = false) {
+  // height: 'low' | 'high' for the user's explicit pass type, null = AI decides
+  passTo(p, m, aim, type, firstTime = false, height = null) {
     const team = p.team;
     const from = this.ball.pos;
     let target, mode = 'ground', angle = 0.5;
@@ -592,6 +602,13 @@ export class Match {
     }
     target.x = clamp(target.x, -HL + 0.8, HL - 0.8);
     target.z = clamp(target.z, -HW + 0.8, HW - 0.8);
+    // the user's chosen pass type always wins: tap = along the ground, flick up = in the air
+    if (height === 'low') mode = 'ground';
+    else if (height === 'high') {
+      const dd = hdist(from, target);
+      mode = 'loft';
+      angle = dd < 18 ? 0.8 : dd < 35 ? 0.62 : 0.55;
+    }
     if (m) {
       m.recv = { point: target.clone(), t: 0 };
       if (type === 'through') m.runT = 0;
@@ -609,7 +626,7 @@ export class Match {
     }
   }
 
-  shoot(p, power, aimDir, firstTime = false) {
+  shoot(p, power, aimDir, firstTime = false, chip = false) {
     const team = p.team;
     const gx = team.attackX;
     const from = this.ball.pos;
@@ -621,8 +638,9 @@ export class Match {
     else side = from.z > 0 ? -1 : 1;
     if (!team.isUser && Math.random() < 0.25) side = -side;
     let zT = side * (GW - (team.isUser ? 0.55 : rand(0.45, 1.1)));
-    let yT = 0.25 + power * 1.45;
-    if (power > 0.88) yT += (power - 0.88) * 9;
+    // normal shots are struck low/driven; only near-full power risks going over
+    let yT = 0.2 + power * 0.85;
+    if (power > 0.93) yT += (power - 0.93) * 14;
     if (!team.isUser) yT = rand(0.2, 1.9);
     const pressure = this.nearestOpp(p).d;
     let spread = (0.22 + dist * 0.028) * (1.4 - p.st.sho) * (pressure < 1.6 ? 1.35 : 1) * (0.75 + power * 0.5);
@@ -630,6 +648,14 @@ export class Match {
     if (firstTime) spread *= 1.25;
     zT += gauss() * spread;
     yT = Math.max(0.15, yT + gauss() * spread * 0.45);
+    if (chip) {
+      // chip: a soft, high-arcing shot that drops under the bar (great vs a keeper off his line)
+      const zc = clamp(side * (GW - 1.0) + gauss() * spread * 0.5, -GW + 0.3, GW - 0.3);
+      const vhc = clamp(5 + dist * 0.28, 7.5, 14) * (0.92 + power * 0.16);
+      this.kick(p, { mode: 'shot', target: new V3(gx, clamp(1.8 + gauss() * 0.25, 1.1, GH + 0.6), zc), vh: vhc, power: 0.35, kind: 'shot', first: firstTime });
+      this.hooks.event('CHIP!');
+      return;
+    }
     const vh = 15 + power * 14 + p.st.sho * 3;
     this.kick(p, { mode: 'shot', target: new V3(gx, yT, zT), vh, power: 0.6 + power * 0.4, kind: 'shot', first: firstTime });
   }
@@ -785,7 +811,7 @@ export class Match {
       if (q && !hands && this.phase === 'play') {
         const aim = q.aim || (q.kind === 'shoot' ? new V3(p.team.dir, 0, 0) : p.fwd.clone());
         if (q.kind === 'shoot') this.shoot(p, 0.7, q.aim, true);
-        else this.pass(p, aim, q.kind, true);
+        else this.pass(p, aim, q.kind, true, q.height);
         return;
       }
     } else if (changed) {
@@ -1813,7 +1839,7 @@ export class Match {
         p.fwd.set(Math.sin(p.facing), 0, Math.cos(p.facing));
       }
       const sprinting = p.sprint && sp > RUN * 0.92;
-      p.stamina = clamp(p.stamina + (sprinting ? -0.03 : 0.022) * dt, 0.2, 1);
+      p.stamina = p.team.isUser ? 1 : clamp(p.stamina + (sprinting ? -0.03 : 0.022) * dt, 0.2, 1);
     }
     // separation
     const P = this.players;
