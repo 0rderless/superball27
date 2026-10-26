@@ -30,7 +30,7 @@ export async function openMatch({ difficulty = 'pro' } = {}) {
 export const isolateSnippet = `
   const S = window.__sb27, I = S.input, m = S.match;
   const iso = c => { m.phase = 'play'; m.restart = null; m.guarantee = null;
-    for (const q of m.players) if (q !== c) { q.pos.set(-45, 0, q.idx * 3 - 15); q.vel.set(0, 0, 0); } };
+    for (const q of m.players) if (q !== c) { q.pos.set(-50, 0, q.idx * 3 - 15); q.vel.set(0, 0, 0); q.desired.set(0, 0, 0); q.busy = 1e6; } else q.busy = 0; };
   const stick = (x, y, spr = false) => { I.move.x = x; I.move.y = y; I.mag = Math.min(1, Math.hypot(x, y)); I.b.sprint.down = spr; };
   const giveBall = c => { iso(c); c.pos.set(0, 0, 0); c.vel.set(0, 0, 0); c.facing = Math.PI / 2; c.fwd.set(1, 0, 0);
     m.ball.pos.set(0.45, 0.11, 0); m.ball.vel.set(0, 0, 0); m.home.controlled = c; m.gainBall(c, false, true); };

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STRIKES, ROLL_DECEL, strideLength, advanceGait, timeToNextStrike, slotDistance, planTouch } from '../js/dribble.js';
+import { STRIKES, ROLL_DECEL, FOOT_REACH, strideLength, advanceGait, timeToNextStrike, slotDistance, planTouch } from '../js/dribble.js';
 
 const near = (a, b, eps, msg) => assert.ok(Math.abs(a - b) <= eps, `${msg ?? ''} expected ${b} ±${eps}, got ${a}`);
 
@@ -53,15 +53,26 @@ function roll(b, v, T) {
   return { x: b.x + v.x / s * d, z: b.z + v.z / s * d };
 }
 
-for (const [label, sp, T, ang] of [['jog straight', 5.5, 0.33, 0], ['sprint 60° turn', 8.5, 0.3, Math.PI / 3]]) {
-  test(`planTouch lands the ball on the slot (${label})`, () => {
+for (const [label, sp, ang] of [['jog straight', 5.5, 0], ['sprint straight', 8.5, 0], ['sprint 60° turn', 8.5, Math.PI / 3]]) {
+  test(`planTouch rolls the ball out to the slot and back onto a later footfall (${label})`, () => {
     const pos = { x: 0, z: 0 }, vel = { x: sp, z: 0 }, dir = { x: Math.cos(ang), z: Math.sin(ang) };
-    const ball = { x: 0.35, z: 0.05 };
-    const v = planTouch({ ball, pos, vel, dir, sp, dri: 0.5, T });
+    const ball = { x: 0.35, z: 0.05 }, phase = STRIKES[0];
+    const { v, T } = planTouch({ ball, pos, vel, dir, sp, dri: 0.5, phase });
+    // T lands exactly on a footfall: next strike plus whole half-cycles
+    const half = strideLength(sp) / sp / 2, first = timeToNextStrike(phase, sp);
+    const k = (T - first) / half;
+    near(k, Math.round(k), 1e-6, 'whole steps');
+    assert.ok(Math.round(k) >= 1, 'not the very next step');
+    // arrives at the landing foot
     const end = roll(ball, v, T);
-    const sd = slotDistance(sp, 0.5);
-    const slot = { x: pos.x + vel.x * T + dir.x * sd, z: pos.z + vel.z * T + dir.z * sd };
-    near(Math.hypot(end.x - slot.x, end.z - slot.z), 0, 0.05, 'miss distance');
+    near(Math.hypot(end.x - (vel.x * T + dir.x * FOOT_REACH), end.z - (vel.z * T + dir.z * FOOT_REACH)), 0, 0.05, 'end at foot');
+    // and on the way it runs out about one slot ahead of where the player would be
+    // (on a straight run) and on the way it runs out about one slot ahead of him
+    if (ang === 0) {
+      let peak = 0;
+      for (let t = 0; t <= T; t += T / 50) { const p = roll(ball, v, t); peak = Math.max(peak, p.x - vel.x * t); }
+      near(peak, slotDistance(sp, 0.5), 0.15, 'peak');
+    }
   });
 }
 

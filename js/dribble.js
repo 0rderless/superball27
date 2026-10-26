@@ -5,7 +5,9 @@
 // gait phases (0..1 per two-step cycle) where the right / left foot lands
 export const STRIKES = [0.51, 0]; // measured with tools/measure-strikes.mjs
 // constant rolling deceleration of a dribbled ball (m/s²)
-export const ROLL_DECEL = 2.0;
+export const ROLL_DECEL = 3.0;
+// how far in front of his centre the landing foot meets the ball
+export const FOOT_REACH = 0.3;
 
 const lerp = (a, b, t) => a + (b - a) * Math.min(1, Math.max(0, t));
 
@@ -49,15 +51,24 @@ export function slotDistance(sp, dri) {
   return base * (1 - 0.2 * dri);
 }
 
-// ball velocity that rolls it (under ROLL_DECEL) onto the slot in front of the next footfall
-export function planTouch({ ball, pos, vel, dir, sp, dri, T }) {
-  T = Math.max(0.12, T);
-  const sd = slotDistance(sp, dri);
-  const tx = pos.x + vel.x * T + dir.x * sd, tz = pos.z + vel.z * T + dir.z * sd;
+// A touch pushes the ball out and lets it roll back onto a later footfall, like a real dribble:
+// it runs about one slot ahead of him mid-way and meets the landing foot after a whole number
+// of steps. Returns the ball velocity and the time T until that footfall.
+export function planTouch({ ball, pos, vel, dir, sp, dri, phase }) {
+  const slot = slotDistance(sp, dri);
+  const first = timeToNextStrike(phase, sp);
+  let T;
+  if (!isFinite(first)) T = 0.4;
+  else {
+    const half = strideLength(sp) / sp / 2;
+    const ideal = Math.sqrt(8 * Math.max(0.05, slot - FOOT_REACH) / ROLL_DECEL);
+    T = first + Math.max(1, Math.round((ideal - first) / half)) * half;
+  }
+  const tx = pos.x + vel.x * T + dir.x * FOOT_REACH, tz = pos.z + vel.z * T + dir.z * FOOT_REACH;
   const dx = tx - ball.x, dz = tz - ball.z, d = Math.hypot(dx, dz);
-  if (d < 1e-6) return { x: 0, z: 0 };
+  if (d < 1e-6) return { v: { x: 0, z: 0 }, T };
   // v·T − ½aT² = d, but never so slow that the ball would stop short and roll backwards
   let v = (d + 0.5 * ROLL_DECEL * T * T) / T;
   if (v < ROLL_DECEL * T) v = Math.sqrt(2 * ROLL_DECEL * d);
-  return { x: dx / d * v, z: dz / d * v };
+  return { v: { x: dx / d * v, z: dz / d * v }, T };
 }

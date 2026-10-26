@@ -2,7 +2,7 @@ import * as THREE from '../lib/three.module.min.js';
 import { F, BALL_R, GRAVITY, FORMATIONS, FORMATION, kickoffShape, DIFFICULTY, TEAMS } from './config.js';
 import { createPlayerModel, animateModel, disposePlayerModel } from './model.js';
 import { Ball } from './ball.js';
-import { advanceGait } from './dribble.js';
+import { advanceGait, slotDistance, planTouch, ROLL_DECEL, FOOT_REACH } from './dribble.js';
 
 const V3 = THREE.Vector3;
 const { HL, HW, GW, GH, GD } = F;
@@ -531,6 +531,7 @@ export class Match {
     const hasBall = ball.owner === p;
 
     // the receiver is free to move: an assisted pass follows him (see homePass)
+    p.letGo = mag === 0; // stick released: a dribbler traps it on the next footfall
     if (mag > 0) {
       p.idleT = 0;
       p.manual = true;
@@ -1185,21 +1186,28 @@ export class Match {
   // slows. A touch only happens when the ball is within reach of the feet; the body turns first and
   // the ball follows (redirect touch, or a sole drag round the body when slow). Run away from it or
   // overhit a sprint touch and it's loose.
+  // Footstep dribbling: the ball is touched only when a foot lands (o.a.strike), and every touch
+  // rolls it onto a slot in front of the next footfall (see js/dribble.js). It is never lost
+  // without a challenge: tackles, pokes, passes and shots are the only ways it leaves him.
   dribble(o, dt) {
     const ball = this.ball, b = ball.pos;
+    const sp = Math.hypot(o.vel.x, o.vel.z);
+    const hx = sp > 0.4 ? o.vel.x / sp : o.fwd.x, hz = sp > 0.4 ? o.vel.z / sp : o.fwd.z;
+    const rx = -hz, rz = hx; // right
+    const dsp = Math.hypot(o.desired.x, o.desired.z);
+    const ux = dsp > 0.4 ? o.desired.x / dsp : hx, uz = dsp > 0.4 ? o.desired.z / dsp : hz;
+    const ctrl = o.st.dri;
     let D = o.drib;
+    const touch = (vx, vz, foot, side = 0, T = 0) => {
+      D.v.set(vx, 0, vz); D.lastTouchT = this.time; D.nextT = this.time + T;
+      o.a.touchT = 0; o.a.touchFoot = foot; o.a.touchSide = side;
+    };
     if (!D) {
-      // first touch: cushion the incoming ball (better dribblers kill it dead)
-      // directional first touch: take it the way he wants to go, a little of the pace kept (more for poor dribblers)
-      const rx0 = ball.vel.x - o.vel.x, rz0 = ball.vel.z - o.vel.z;
-      const rel = Math.hypot(rx0, rz0);
-      const keep = Math.min(rel * (0.12 - 0.08 * o.st.dri), 1.4 - 0.8 * o.st.dri);
-      const dl = Math.hypot(o.desired.x, o.desired.z);
-      const ux = dl > 0.4 ? o.desired.x / dl : rel > 0.1 ? rx0 / rel : 0, uz = dl > 0.4 ? o.desired.z / dl : rel > 0.1 ? rz0 / rel : 0;
-      D = o.drib = { v: new V3(o.vel.x + ux * keep, 0, o.vel.z + uz * keep), cd: 0.12, foot: 1, drag: false, age: 0 };
+      // first touch: cushion it straight into the slot he's heading for
+      D = o.drib = { v: new V3(), lastTouchT: this.time, drag: false, plant: 0 };
+      const { v, T } = planTouch({ ball: b, pos: o.pos, vel: o.vel, dir: { x: ux, z: uz }, sp, dri: ctrl, phase: o.a.gait });
+      touch(v.x, v.z, o.a.strike || 'R', 0, T);
     }
-    D.cd -= dt;
-    D.age = (D.age || 0) + dt;
     const r = this.restart;
     if (this.phase === 'restart' && r && r.ready && r.taker === o) { ball.vel.set(0, 0, 0); D.v.set(0, 0, 0); return; }
     if (o.pending || (o.skill && !o.skill.released)) {
@@ -1211,16 +1219,9 @@ export class Match {
       ball.vel.copy(D.v);
       return;
     }
-    const sp = Math.hypot(o.vel.x, o.vel.z);
-    const hx = sp > 0.4 ? o.vel.x / sp : o.fwd.x, hz = sp > 0.4 ? o.vel.z / sp : o.fwd.z;
-    const rx = -hz, rz = hx; // right
     let relX = b.x - o.pos.x, relZ = b.z - o.pos.z;
-    let dist = Math.hypot(relX, relZ);
+    const dist = Math.hypot(relX, relZ);
     let ahead = relX * hx + relZ * hz, side = relX * rx + relZ * rz;
-    const ctrl = o.st.dri;
-    const dsp = Math.hypot(o.desired.x, o.desired.z);
-    // ball got away from him
-    if (dist > 2.6) { this.looseBall(o, D); return; }
     const bAng = Math.atan2(side, ahead); // 0 = straight ahead of his run
     if (D.plant > 0) {
       // sole on the ball while he stops: it stays under the planted foot
@@ -1240,60 +1241,59 @@ export class Match {
       const rate = (6 + 4 * ctrl) * (1 + sp * 0.12);
       const na = bAng + clamp(-bAng, -rate * dt, rate * dt);
       const nx = o.pos.x + (hx * Math.cos(na) + rx * Math.sin(na)) * rad, nz = o.pos.z + (hz * Math.cos(na) + rz * Math.sin(na)) * rad;
-      D.v.set((nx - b.x) / dt + o.vel.x * 0.0, 0, (nz - b.z) / dt);
+      D.v.set((nx - b.x) / dt, 0, (nz - b.z) / dt);
       b.x = nx; b.z = nz; b.y = BALL_R;
-      if (!D.drag) { D.drag = true; o.a.touchT = 0; o.a.touchSide = Math.sign(-bAng); }
+      if (!D.drag) { D.drag = true; touch(D.v.x, D.v.z, bAng > 0 ? 'R' : 'L', Math.sign(-bAng)); }
       ball.vel.copy(D.v);
       return;
     }
-    if (D.drag) D.cd = 0; // finished dragging it round: knock it on straight away
-    D.drag = false;
+    if (D.drag) {
+      // dragged round: the next footfall knocks it on; until then keep it at the feet
+      D.drag = false;
+      D.v.set(o.vel.x, 0, o.vel.z);
+    }
+    const strike = o.a.strike;
+    const slot = slotDistance(sp, ctrl);
     if (dsp < 0.4 && sp < 1.6) {
-      // stopping: sole on it, settle it just in front
-      D.v.multiplyScalar(Math.exp(-dt * 9));
-      if (dist < 1.1) {
-        const tx = o.pos.x + o.fwd.x * 0.42, tz = o.pos.z + o.fwd.z * 0.42;
-        const k = 1 - Math.exp(-dt * 6);
-        b.x += (tx - b.x) * k; b.z += (tz - b.z) * k;
-      }
-    } else {
-      const along = D.v.x * hx + D.v.z * hz;
-      const run = Math.min(1, sp / 8.6);
-      const inReach = dist < 0.95 + 0.35 * run && ahead > -0.3;
-      const caughtUp = ahead < 0.5 + 0.25 * run && along < sp + 0.5;
-      const bAngV = Math.hypot(D.v.x, D.v.z) > 0.5 ? Math.abs(wrap(Math.atan2(D.v.x, D.v.z) - Math.atan2(hx, hz))) : 0;
-      const needsRedirect = sp > 1.5 && bAngV > 0.4;
-      // what he's asking for vs where he's running
-      const errD = dsp > 0.4 ? Math.abs(wrap(Math.atan2(o.desired.x, o.desired.z) - Math.atan2(hx, hz))) : 0;
-      const sgnD = dsp > 0.4 ? Math.sign(wrap(Math.atan2(o.desired.x, o.desired.z) - Math.atan2(hx, hz))) : 0;
-      if (D.cd <= 0 && errD > 1.9 && sp > 2.2 && dist < 1.5 && ahead > -0.25) {
-        // turning back: plant and stop the ball with the sole so it doesn't run away
+      // standing / stopping: sole on it, settled just in front (no footfalls needed)
+      const k = 1 - Math.exp(-dt * 8);
+      const tx = o.pos.x + o.fwd.x * 0.32, tz = o.pos.z + o.fwd.z * 0.32;
+      const nx = b.x + (tx - b.x) * k, nz = b.z + (tz - b.z) * k;
+      D.v.set((nx - b.x) / dt, 0, (nz - b.z) / dt);
+      b.x = nx; b.z = nz; b.y = BALL_R;
+      ball.vel.copy(D.v);
+      if (strike) { D.lastTouchT = this.time; o.a.touchT = 0; o.a.touchFoot = strike; o.a.touchSide = 0; }
+      return;
+    }
+    const errD = Math.abs(wrap(Math.atan2(ux, uz) - Math.atan2(hx, hz)));
+    const sgnD = Math.sign(wrap(Math.atan2(ux, uz) - Math.atan2(hx, hz)));
+    // a foot lands where the ball has rolled back to it, or he wants a new direction and can reach it
+    // (the footfall the last touch was planned for, or sooner if he's about to run over it)
+    const atFoot = ahead > -0.2 && Math.abs(side) < 0.5 &&
+      ((this.time >= D.nextT - 0.05 && ahead < FOOT_REACH + 0.32) || ahead < FOOT_REACH + 0.04);
+    const canCut = errD > 0.45 && dist < slot + 0.5 && ahead > -0.2 && this.time - D.lastTouchT > 0.15;
+    const letGo = dsp < 0.4 || (o.letGo && o.team.isUser && o === o.team.controlled);
+    const runningAway = ahead > FOOT_REACH + 0.15 && D.v.x * hx + D.v.z * hz > sp;
+    if ((strike || runningAway) && letGo && sp > 0.6 && dist < slot + 0.6 && ahead > -0.2) {
+      // stick released: this footfall (or a stretch, if it's running away) traps it under the sole
+      D.plant = clamp(sp * 0.08, 0.2, 0.6); D.px = hx; D.pz = hz;
+      touch(0, 0, strike || (o.a.touchFoot === 'R' ? 'L' : 'R'));
+    } else if (strike && (atFoot || canCut)) {
+      if (errD > 1.9 && sp > 2.2) {
+        // turning back: plant and stop it with the sole so it doesn't run away
         D.plant = clamp(sp * 0.06, 0.25, 0.5); D.px = hx; D.pz = hz;
-        D.cd = 0.3;
-        o.a.touchT = 0; o.a.touchSide = 0;
-      } else if (D.cd <= 0 && errD > 0.45 && errD <= 1.9 && sp > 1.5 && dist < 0.95 + 0.35 * run && ahead > -0.15) {
-        // cutting: outside/inside of the foot pushes it into the turn, the body follows
-        const a2 = Math.atan2(hx, hz) + sgnD * Math.min(errD, 1.1) * 0.65;
-        const v2 = sp * 0.85 + 0.6 + (o.sprint ? 0.8 : 0.2);
-        D.v.set(Math.sin(a2) * v2, 0, Math.cos(a2) * v2);
-        D.cd = 0.22;
-        o.a.touchT = 0; o.a.touchSide = sgnD;
-      } else if (D.cd <= 0 && inReach && (caughtUp || needsRedirect)) {
-        // touch: along his run, steering it back under the body, alternate feet
-        D.foot = -D.foot;
-        const push = (o.sprint ? 1.6 + 1.9 * (1 - ctrl) : 0.45 + 0.75 * (1 - ctrl)) * (0.35 + 0.65 * run) + 0.35;
-        const fwdV = Math.max(sp, 0.6) + push;
-        // sideways: bring it back across his path by the next stride, alternating feet
-        const lat = clamp(-side / 0.38, -1.4, 1.4) + D.foot * 0.3;
-        D.v.set(hx * fwdV + rx * lat, 0, hz * fwdV + rz * lat);
-        D.cd = 0.17 + 0.08 * (1 - run);
-        o.a.touchT = 0;
-        o.a.touchSide = needsRedirect ? Math.sign(-side) || D.foot : 0;
+        touch(0, 0, strike);
+      } else {
+        // along the run, or into the turn with the inside/outside of the foot
+        let dx = ux, dz = uz;
+        if (errD > 0.45) { const a2 = Math.atan2(hx, hz) + sgnD * Math.min(errD, 1.1) * 0.65; dx = Math.sin(a2); dz = Math.cos(a2); }
+        const { v, T } = planTouch({ ball: b, pos: o.pos, vel: o.vel, dir: { x: dx, z: dz }, sp, dri: ctrl, phase: o.a.gait });
+        touch(v.x, v.z, strike, errD > 0.45 ? sgnD : 0, T);
       }
     }
     // roll
     const bs = Math.hypot(D.v.x, D.v.z);
-    if (bs > 0) { const n = Math.max(0, bs - (1.7 + bs * 0.22) * dt); D.v.multiplyScalar(n / bs); }
+    if (bs > 0) { const n = Math.max(0, bs - ROLL_DECEL * dt); D.v.multiplyScalar(n / bs); }
     b.x += D.v.x * dt; b.z += D.v.z * dt; b.y = BALL_R;
     // he can't run through it: shins knock it on
     relX = b.x - o.pos.x; relZ = b.z - o.pos.z;
@@ -1306,16 +1306,7 @@ export class Match {
     ball.vel.copy(D.v);
   }
 
-  looseBall(o, D) {
-    const ball = this.ball;
-    ball.owner = null;
-    ball.vel.set(D.v.x, 0, D.v.z);
-    o.drib = null;
-    o.cool = 0.15;
-    this.lastTouch = o;
-    this.kickId++;
-    this.lastKick = { kind: 'loose', team: o.team, id: this.kickId, by: o };
-  }
+
 
   // Assisted pass: steer the ball onto the receiver wherever he moves.
   homePass(dt) {
