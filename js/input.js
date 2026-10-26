@@ -73,6 +73,16 @@ export class Input {
       el.addEventListener('pointermove', e => {
         if (!ids.has(e.pointerId) || !st.down || st.flick) return;
         const dx = e.clientX - st.sx, dy = e.clientY - st.sy;
+        if (k === 'skill' && Math.hypot(dx, dy) > 22) {
+          // skill button: swipe in any direction picks the move
+          const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+          st.flick = true;
+          el.classList.add('flicked');
+          setTimeout(() => el.classList.remove('flicked'), 350);
+          if (navigator.vibrate) try { navigator.vibrate(15); } catch (_) { /* ignore */ }
+          st.fire = true; st.fireType = dir; st.fired = true;
+          return;
+        }
         if (dy < -22 && -dy > Math.abs(dx) * 0.8) {
           // flick up: high pass / lob through / chip shot
           st.flick = true;

@@ -13,23 +13,30 @@ A 3D mobile football game built with plain **HTML + CSS + JavaScript + Three.js*
 | | Attack | Defend |
 |---|---|---|
 | Left thumb | Floating joystick (push to the edge = sprint) | same |
-| PASS | Ground pass toward the joystick direction | SWITCH player |
-| THROUGH | Pass into space / lofted through ball | Hold to PRESS |
-| SHOOT | Hold for power, release to shoot (aim with joystick) | TACKLE |
-| SKILL | Feint & burst past a defender | SLIDE tackle |
-| SPRINT | Hold to sprint | same |
+| PASS | Tap = low pass · flick up = high pass | SWITCH player |
+| THROUGH | Tap = ground through ball · flick up = lobbed | Hold to PRESS |
+| SHOOT | Hold for power, release = low driven shot · flick up while holding = chip | TACKLE |
+| SKILL | Tap = step-over · swipe ◀ ▶ = cut left/right · ▲ = rainbow flick · ▼ = drag-back | SLIDE tackle |
+| SPRINT | Hold to sprint (ZorpFC never tire) | same |
 
 Press PASS/SHOOT while a pass is still travelling to you for a **one-touch pass / first-time shot**.
-Keyboard: WASD/arrows, Space pass, K shoot, L through, Shift sprint, E skill, P pause.
+After a goal, tap to skip the replay. Keyboard: WASD/arrows, Space pass / U high pass, K shoot / O chip,
+L through / Y lobbed through, Shift sprint, E skill, P pause.
 
 ## Features
-- Jointed, animated players (run, kick, tackle, slide, headers, keeper dives, celebrations), with numbered kits
-- Ball physics with spin, bounce, drag, posts, crossbar and net
-- Team AI in a 4-3-3: pressing, cover, marking, runs in behind, crosses, keeper positioning and saves
+- Motion-captured players (run, sprint, jockeying, slides, celebrations, stumbles) with football moves layered on top
+- Kits, numbers, skin, hair and faces painted in a custom shader — one draw call per player
+- Assisted passing that follows the receiver; explicit low/high passes; driven shots and chips; 5 skill moves
+- Slow-motion goal replays with cinematic cameras
+- Live spoken commentary (browser speech), crowd chants, air horns, net sounds
+- Team AI in a 4-3-3: pressing, jockeying, cover, marking, runs in behind, crosses, keeper positioning and saves
 - Corners, throw-ins, goal kicks, kick-offs, half time, full-time stats
-- 3 difficulties, 4/6/10 minute matches, 3 camera distances, Smooth/HD graphics
-- Floodlit stadium, LED ad boards, crowd and synthesized crowd audio
+- 3 difficulties, 4/6/10 minute matches, 3 camera distances, Smooth/HD graphics, assists on/off
+
+## Credits
+- Player model and animations: [Quaternius — Universal Animation Library 1 & 2](https://quaternius.com/packs/universalanimationlibrary.html), CC0 (`assets/LICENSE-Quaternius.txt`). `tools/build-players.mjs` rebuilds `assets/player.glb` from the original packs.
+- [Three.js](https://threejs.org) r170 and its GLTFLoader / SkeletonUtils, MIT.
 
 ## Files
-`index.html` · `css/style.css` · `js/` (`main` app/camera/HUD, `match` rules + AI, `model` players, `ball`, `stadium`, `input`, `audio`, `config` teams) · `lib/three.module.min.js` (Three.js r170, MIT) · `sw.js` + `manifest.json` (home-screen app).
+`index.html` · `css/style.css` · `js/` (`main` app/camera/HUD, `match` rules + AI + replays, `model` players + animation, `commentary`, `ball`, `stadium`, `input`, `audio`, `config` teams) · `lib/three.module.min.js` (Three.js r170, MIT) · `sw.js` + `manifest.json` (home-screen app).
 After changing files, bump `VERSION` in `sw.js` so installed copies update.

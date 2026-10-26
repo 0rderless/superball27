@@ -527,6 +527,7 @@ export function buildStadium(scene, quality, renderer) {
       confetti.visible = true;
       confT = 7;
     },
+    clearConfetti() { confT = 0; confetti.visible = false; },
     update(dt, excitement, focus) {
       t0 += dt;
       // flashes: random sparkle, more when the game is exciting

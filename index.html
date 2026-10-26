@@ -84,6 +84,7 @@
     <div id="banner"><div class="b1"></div><div class="b2"></div></div>
     <div id="event"></div>
     <div id="hint"></div>
+    <div id="replay-badge"><i></i>REPLAY<small>tap to skip</small></div>
   </div>
 
   <!-- TOUCH CONTROLS -->
@@ -95,7 +96,7 @@
       <button class="btn b-pass" data-btn="pass"><i class="flick">&#9650; HIGH</i><span>PASS</span></button>
       <button class="btn b-shoot" data-btn="shoot"><i class="flick">&#9650; CHIP</i><span>SHOOT</span></button>
       <button class="btn b-through" data-btn="through"><i class="flick">&#9650; LOB</i><span>THROUGH</span></button>
-      <button class="btn b-skill" data-btn="skill"><span>SKILL</span></button>
+      <button class="btn b-skill" data-btn="skill"><i class="sk sk-u">&#9650;</i><i class="sk sk-d">&#9660;</i><i class="sk sk-l">&#9664;</i><i class="sk sk-r">&#9654;</i><span>SKILL</span></button>
     </div>
   </div>
 
@@ -106,9 +107,10 @@
       <button class="mbtn primary" id="resume-btn">Resume</button>
       <button class="mbtn" id="restart-btn">Restart match</button>
       <button class="mbtn" id="sound-btn">Sound: On</button>
+      <button class="mbtn" id="commentary-btn">Commentary: On</button>
       <button class="mbtn" id="quit-btn">Quit to menu</button>
       <div class="help">
-        <div><b>Attack</b> · tap PASS = low pass, flick it up = high pass · THROUGH = pass into space (flick up = lobbed) · hold SHOOT for power, flick up while holding = chip · SKILL feint &amp; burst</div>
+        <div><b>Attack</b> · tap PASS = low pass, flick it up = high pass · THROUGH = pass into space (flick up = lobbed) · hold SHOOT for power, flick up while holding = chip · SKILL: tap = step-over, swipe ◀ ▶ = cut left/right, ▲ = rainbow flick, ▼ = drag-back</div>
         <div><b>Defend</b> · SWITCH player · TACKLE · hold PRESS to chase · SLIDE tackle</div>
         <div><b>Move</b> · left thumb anywhere · push to the edge to sprint</div>
         <div class="kb">Keyboard: WASD/arrows · Space pass / U high pass · K shoot / O chip · L through / Y lobbed through · Shift sprint · E skill</div>

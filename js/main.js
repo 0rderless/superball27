@@ -1,6 +1,8 @@
 import * as THREE from '../lib/three.module.min.js';
 import { buildStadium } from './stadium.js';
 import { Match } from './match.js';
+import { loadPlayerAssets } from './model.js';
+import { Commentary } from './commentary.js';
 import { Input } from './input.js';
 import { Sound } from './audio.js';
 import { F } from './config.js';
@@ -75,7 +77,17 @@ const rctx = ui.radar.getContext('2d');
 let camSnap = false;
 let bannerTimer = 0, eventTimer = 0;
 
+const commentary = new Commentary();
+commentary.enabled = store.get('commentary', true);
 const hooks = {
+  say(key, vars, prio) { if (state === 'game' || state === 'intro') commentary.say(key, vars, prio); },
+  replay(on) {
+    $('replay-badge').classList.toggle('show', on);
+    $('hud').classList.toggle('replaying', on);
+    if (on) { ui.banner.className = ''; if (stadium) stadium.clearConfetti(); }
+    ui.controls.classList.toggle('hidden', on);
+    hooks.hint('');
+  },
   fade(cb) {
     ui.fade.classList.add('on');
     setTimeout(() => { cb(); camSnap = true; ui.fade.classList.remove('on'); }, 280);
@@ -117,7 +129,9 @@ let match = null;
 let state = 'menu'; // menu | intro | game | paused | result
 let introT = 0;
 
+let assetsReady = false;
 function newMatch() {
+  if (!assetsReady) return;
   if (match) match.dispose();
   match = new Match(scene, sound, settings, hooks);
 }
@@ -131,6 +145,8 @@ function showScreen(id) {
 
 function startGame() {
   sound.init();
+  commentary.unlock();
+  commentary.stop();
   applyGraphics();
   newMatch();
   input.reset();
@@ -175,6 +191,7 @@ function showResult() {
 
 function toMenu() {
   state = 'menu';
+  commentary.stop();
   newMatch();
   showScreen('menu');
   $('hud').classList.add('hidden');
@@ -183,6 +200,7 @@ function toMenu() {
 function pause() {
   if (state !== 'game') return;
   state = 'paused';
+  commentary.stop();
   input.reset();
   showScreen('pause');
 }
@@ -231,13 +249,17 @@ document.querySelectorAll('.opt').forEach(o => {
 });
 syncOptions();
 
-$('play-btn').addEventListener('click', startGame);
+$('play-btn').addEventListener('click', () => { if (match) startGame(); });
 $('pause-btn').addEventListener('click', pause);
 $('resume-btn').addEventListener('click', resume);
 $('restart-btn').addEventListener('click', startGame);
 $('quit-btn').addEventListener('click', toMenu);
 $('again-btn').addEventListener('click', startGame);
 $('menu-btn').addEventListener('click', toMenu);
+const comBtn = $('commentary-btn');
+const syncCom = () => { comBtn.textContent = 'Commentary: ' + (commentary.enabled ? 'On' : 'Off'); };
+comBtn.addEventListener('click', () => { commentary.enabled = !commentary.enabled; store.set('commentary', commentary.enabled); if (!commentary.enabled) commentary.stop(); syncCom(); });
+syncCom();
 const soundBtn = $('sound-btn');
 const syncSound = () => { soundBtn.textContent = 'Sound: ' + (settings.sound ? 'On' : 'Off'); };
 soundBtn.addEventListener('click', () => {
@@ -251,7 +273,10 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Escape' || e.code === 'KeyP') state === 'game' ? pause() : state === 'paused' && resume();
 });
 // skip intro with a tap
-window.addEventListener('pointerdown', () => { if (state === 'intro' && introT > 0.6) introT = 99; });
+window.addEventListener('pointerdown', () => {
+  if (state === 'intro' && introT > 0.6) introT = 99;
+  if (state === 'game' && match && match.replay && match.replay.i > match.replay.start + 15) match.skipReplay();
+});
 
 const standalone = window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || navigator.standalone;
 if (standalone) $('install-tip').classList.add('hidden');
@@ -300,18 +325,44 @@ function updateCamera(dt) {
     camLook.set(0, 0, 0);
     return;
   }
+  if (match.replay) {
+    match.replayCamera(camDesired, focusV);
+    if (camSnap) { camera.position.copy(camDesired); camLook.copy(focusV); }
+    camera.position.lerp(camDesired, 1 - Math.exp(-dt * 3));
+    camLook.lerp(focusV, 1 - Math.exp(-dt * 6));
+    camera.lookAt(camLook);
+    camSnap = false;
+    return;
+  }
   match.focus(focusV);
+  // look ahead in the direction of play, like a TV director
+  if (match.possTeam && match.phase === 'play') focusV.x += match.possTeam.dir * 3.5;
   let zoom = 1;
   if (match.phase === 'goal') zoom = 0.55;
   else if (match.phase === 'restart' && match.restart && match.restart.type === 'corner') zoom = 0.92;
-  const k = camSnap ? 1 : 1 - Math.exp(-dt * 3.2);
-  camTarget.lerp(focusV, k);
+  else zoom = 1 + clamp((match.ball.speed - 12) / 60, 0, 0.12); // pull back a touch on long balls
+  if (camSnap) { camTarget.copy(focusV); camVel.set(0, 0, 0); posVel.set(0, 0, 0); }
+  smoothDamp(camTarget, camVel, focusV, 0.32, dt);
   const tx = clamp(camTarget.x, -F.HL + 6, F.HL - 6);
   camDesired.set(tx * 0.97, c.h * zoom, Math.min(camTarget.z * 0.5 + c.back * zoom, F.HW + 28));
-  camera.position.lerp(camDesired, camSnap ? 1 : 1 - Math.exp(-dt * 2.6));
-  camLook.lerp(focusV.set(camTarget.x, 0.4, camTarget.z + 0.5), camSnap ? 1 : 1 - Math.exp(-dt * 5));
+  if (camSnap) camera.position.copy(camDesired);
+  else smoothDamp(camera.position, posVel, camDesired, 0.45, dt);
+  camLook.set(camTarget.x, 0.4, camTarget.z + 0.5);
   camera.lookAt(camLook);
   camSnap = false;
+}
+
+// critically damped spring (Unity-style SmoothDamp) — no overshoot, no jitter
+const camVel = new THREE.Vector3(), posVel = new THREE.Vector3();
+function smoothDamp(cur, vel, target, time, dt) {
+  const w = 2 / time, x = w * dt;
+  const e = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+  for (const k of ['x', 'y', 'z']) {
+    const ch = cur[k] - target[k];
+    const tmp = (vel[k] + w * ch) * dt;
+    vel[k] = (vel[k] - w * tmp) * e;
+    cur[k] = target[k] + (ch + tmp) * e;
+  }
 }
 
 // ---------------------------------------------------------------- HUD
@@ -389,9 +440,22 @@ function drawRadar() {
 
 // ---------------------------------------------------------------- loop
 applyGraphics();
-newMatch();
 showScreen('menu');
 $('hud').classList.add('hidden');
+const playBtn = $('play-btn');
+playBtn.disabled = true;
+playBtn.classList.add('loading');
+loadPlayerAssets().then(() => {
+  assetsReady = true;
+  newMatch();
+  playBtn.disabled = false;
+  playBtn.classList.remove('loading');
+}).catch(err => {
+  console.error(err);
+  playBtn.querySelector('span').textContent = 'RETRY';
+  playBtn.disabled = false;
+  playBtn.onclick = () => location.reload();
+});
 
 let last = performance.now();
 const focusDefault = new THREE.Vector3();

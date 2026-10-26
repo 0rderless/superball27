@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Anim viewer</title>
+<style>body{margin:0;background:#223;color:#fff;font:12px sans-serif}#l{position:fixed;inset:0;pointer-events:none}#l div{position:absolute;transform:translateX(-50%);background:#0008;padding:1px 3px}</style></head>
+<body><div id="l"></div>
+<script type="module">
+// Dev tool: ?clips=A,B,C&t=0.5 renders each clip (at normalised time t) side by side.
+import * as THREE from '../lib/three.module.min.js';
+import { GLTFLoader } from '../lib/GLTFLoader.js';
+import * as SkeletonUtils from '../lib/SkeletonUtils.js';
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(innerWidth, innerHeight); document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x334);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444466, 2)); const d = new THREE.DirectionalLight(0xffffff, 2); d.position.set(2, 5, 4); scene.add(d);
+const grid = new THREE.GridHelper(40, 40); scene.add(grid);
+const gltf = await new GLTFLoader().loadAsync('../assets/player.glb');
+const box = new THREE.Box3().setFromObject(gltf.scene);
+const info = { size: box.getSize(new THREE.Vector3()).toArray().map(v => +v.toFixed(3)), min: box.min.toArray().map(v => +v.toFixed(3)), clips: gltf.animations.map(a => a.name + ':' + a.duration.toFixed(2)) };
+const names = (q.get('clips') || 'Idle_Loop').split(',');
+const t = parseFloat(q.get('t') || '0.5');
+const cam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.1, 100);
+const sp = 1.4, n = names.length;
+const side = q.get('side') === '1';
+names.forEach((nm, i) => {
+  const o = SkeletonUtils.clone(gltf.scene);
+  o.position.x = (i - (n - 1) / 2) * sp;
+  if (side) o.rotation.y = Math.PI / 2;
+  scene.add(o);
+  const clip = gltf.animations.find(a => a.name === nm.split('@')[0]);
+  const tt = nm.includes('@') ? parseFloat(nm.split('@')[1]) : t;
+  if (clip) { const m = new THREE.AnimationMixer(o); const a = m.clipAction(clip); a.play(); m.setTime(clip.duration * tt); }
+  o.userData.label = nm;
+});
+cam.position.set(0, 1.2, Math.max(4, n * 1.25)); cam.lookAt(0, 0.9, 0);
+r.render(scene, cam);
+for (const o of scene.children) if (o.userData.label) { const p = new THREE.Vector3(o.position.x, 2.05, 0).project(cam); const el = document.createElement('div'); el.textContent = o.userData.label; el.style.left = ((p.x + 1) / 2 * innerWidth) + 'px'; el.style.top = ((1 - p.y) / 2 * innerHeight) + 'px'; document.getElementById('l').appendChild(el); }
+window.__info = info; window.__done = true;
+</script></body></html>

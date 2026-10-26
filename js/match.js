@@ -1,6 +1,6 @@
 import * as THREE from '../lib/three.module.min.js';
 import { F, BALL_R, GRAVITY, FORMATION, KICKOFF, DIFFICULTY, TEAMS } from './config.js';
-import { createPlayerModel, animateModel } from './model.js';
+import { createPlayerModel, animateModel, disposePlayerModel } from './model.js';
 import { Ball } from './ball.js';
 
 const V3 = THREE.Vector3;
@@ -41,6 +41,7 @@ class Player {
     this.a = {
       speed: 0, phase: Math.random() * 6, kickT: -1, kickPow: 0.5, tackleT: -1, slideT: -1, diveT: -1, diveSide: 1, diveHigh: false,
       headerT: -1, throwT: -1, throwReady: false, celebrate: 0, celebrateStyle: 0, sad: 0, hold: false, ready: false,
+      hitT: -1, hitBig: false, skillT: -1, skillType: 'tap', skillSide: 1, moveAngle: 0, turnRate: 0, celebClip: 0, sadClip: 0,
     };
     this.busy = 0;
     this.action = null;
@@ -163,11 +164,7 @@ export class Match {
   dispose() {
     for (const p of this.players) {
       this.scene.remove(p.model.root);
-      const mesh = p.model.mesh;
-      mesh.geometry.dispose();
-      mesh.material.map.dispose();
-      mesh.material.dispose();
-      mesh.skeleton.dispose();
+      disposePlayerModel(p.model);
     }
     this.scene.remove(this.ball.mesh, this.ball.shadow);
     for (const o of this.objects) this.scene.remove(o);
@@ -245,7 +242,10 @@ export class Match {
     else this.home.controlled = this.home.players[9];
   }
 
+  say(key, vars, prio = 1) { if (this.hooks.say) this.hooks.say(key, vars || {}, prio); }
+
   startMatch() {
+    this.say('kickoff', {}, 3);
     this.phase = 'restart';
     this.phaseT = 0;
     this.placeKickoff(this.home);
@@ -255,12 +255,13 @@ export class Match {
 
   // ---------------------------------------------------------------- main update
   update(dt, input) {
+    if (this.replay) { this.updateReplay(dt); return; }
     this.time += dt;
     this.phaseT += dt;
     const ball = this.ball;
 
     for (const p of this.players) {
-      p.cool -= dt; p.stun -= dt; p.tackleCD -= dt; p.skillT -= dt;
+      p.cool -= dt; p.stun -= dt; p.tackleCD -= dt; p.skillT -= dt; p.skillCD = (p.skillCD || 0) - dt;
       if (p.busy > 0) p.busy -= dt;
     }
 
@@ -278,9 +279,10 @@ export class Match {
       if (ph === 'restart') this.updateRestart(dt);
     } else if (ph === 'goal') {
       this.celebrationAI(dt);
-      if (this.phaseT > 5.2 && !this._transition) {
+      if (this.phaseT > 3.4 && !this._transition) {
         this._transition = true;
-        this.hooks.fade(() => { this._transition = false; this.setupKickoff(this.concede); });
+        // celebration, then the replay, then kick-off
+        this.hooks.fade(() => { this._transition = false; if (!this.startReplay()) this.setupKickoff(this.concede); });
       }
     } else if (ph === 'halftime') {
       this.idleAI(dt);
@@ -310,9 +312,148 @@ export class Match {
     const dg = HL - Math.abs(ball.pos.x);
     const ex = this.phase === 'goal' ? 1 : clamp(1 - dg / 30, 0, 1) * (Math.abs(ball.pos.z) < 25 ? 1 : 0.5);
     this.excite += (ex - this.excite) * Math.min(1, dt * 2);
+    this.chantT = (this.chantT || 20) - dt;
+    if (this.chantT <= 0 && this.phase === 'play' && this.possTeam === this.home && this.home.along(ball.pos) > 0.55) { this.chantT = 35 + Math.random() * 25; this.sound.chant(); }
 
     this.animate(dt);
     this.updateIndicators(dt);
+    if (this.phase === 'play' || this.phase === 'restart' || this.phase === 'goal') this.record(dt);
+  }
+
+  // ---------------------------------------------------------------- replays
+  // Ring buffer of the last ~10 s: ball + every player's root, body offsets and bone rotations.
+  initRecorder() {
+    const bones = ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'Head', 'clavicle_l', 'clavicle_r', 'upperarm_l', 'upperarm_r',
+      'lowerarm_l', 'lowerarm_r', 'hand_l', 'hand_r', 'thigh_l', 'thigh_r', 'calf_l', 'calf_r', 'foot_l', 'foot_r', 'ball_l', 'ball_r'];
+    this.recBones = bones;
+    this.recPer = 9 + bones.length * 4;
+    this.recStride = 8 + this.players.length * this.recPer;
+    this.recCap = 320; // frames at 30 Hz
+    this.recBuf = new Float32Array(this.recCap * this.recStride);
+    this.recN = 0;
+    this.recHead = 0;
+    this.recAcc = 0;
+  }
+
+  record(dt) {
+    if (!this.recBuf) this.initRecorder();
+    this.recAcc += dt;
+    if (this.recAcc < 1 / 30) return;
+    this.recAcc = 0;
+    const B = this.recBuf, o = this.recHead * this.recStride;
+    const ball = this.ball, q = ball.mesh.quaternion;
+    B[o] = this.time; B[o + 1] = ball.pos.x; B[o + 2] = ball.pos.y; B[o + 3] = ball.pos.z;
+    B[o + 4] = q.x; B[o + 5] = q.y; B[o + 6] = q.z; B[o + 7] = q.w;
+    let k = o + 8;
+    for (const p of this.players) {
+      const m = p.model;
+      B[k] = p.pos.x; B[k + 1] = p.pos.z; B[k + 2] = p.facing;
+      B[k + 3] = m.body.position.x; B[k + 4] = m.body.position.y; B[k + 5] = m.body.rotation.z;
+      const pv = m.bones.pelvis.position;
+      B[k + 6] = pv.x; B[k + 7] = pv.y; B[k + 8] = pv.z;
+      let j = k + 9;
+      for (const bn of this.recBones) {
+        const bq = m.bones[bn].quaternion;
+        B[j] = bq.x; B[j + 1] = bq.y; B[j + 2] = bq.z; B[j + 3] = bq.w;
+        j += 4;
+      }
+      k += this.recPer;
+    }
+    this.recHead = (this.recHead + 1) % this.recCap;
+    this.recN = Math.min(this.recCap, this.recN + 1);
+  }
+
+  frameIdx(i) { return ((this.recHead - this.recN + i) % this.recCap + this.recCap) % this.recCap; }
+
+  startReplay() {
+    if (!this.recN || this.recN < 40) return false;
+    // find the frame where the goal went in
+    const B = this.recBuf, S = this.recStride;
+    let goalI = this.recN - 1;
+    for (let i = 0; i < this.recN; i++) if (B[this.frameIdx(i) * S] >= this.goalTime) { goalI = i; break; }
+    const start = Math.max(0, goalI - 150), end = Math.min(this.recN - 1, goalI + 36);
+    this.replay = { i: start, start, goalI, end, cam: Math.random() < 0.5 ? 0 : 1 };
+    this.ring.visible = this.arrow.visible = this.recvRing.visible = this.aimArrow.visible = false;
+    this.hooks.replay(true);
+    this.say('replay', {}, 2);
+    return true;
+  }
+
+  skipReplay() {
+    if (!this.replay || this._transition) return;
+    this.replay.i = this.replay.end;
+  }
+
+  updateReplay(dt) {
+    const r = this.replay;
+    // real-time build-up, slow motion around the finish
+    const toGoal = r.goalI - r.i;
+    const speed = toGoal < 45 && toGoal > -25 ? 0.4 : 1;
+    r.i = Math.min(r.end, r.i + dt * 30 * speed);
+    const i0 = Math.floor(r.i), i1 = Math.min(r.end, i0 + 1), f = r.i - i0;
+    this.applyFrame(this.frameIdx(i0), this.frameIdx(i1), f);
+    this.updateTrail(dt);
+    if (r.i >= r.end && !this._transition) {
+      this._transition = true;
+      this.hooks.fade(() => {
+        this._transition = false;
+        this.replay = null;
+        this.hooks.replay(false);
+        this.setupKickoff(this.concede);
+      });
+    }
+  }
+
+  applyFrame(fa, fb, t) {
+    const B = this.recBuf, S = this.recStride;
+    const a = fa * S, b = fb * S;
+    const L = (x, y) => x + (y - x) * t;
+    const ball = this.ball;
+    ball.pos.set(L(B[a + 1], B[b + 1]), L(B[a + 2], B[b + 2]), L(B[a + 3], B[b + 3]));
+    ball.sync(0);
+    const qa = this._qa || (this._qa = new THREE.Quaternion()), qb = this._qb || (this._qb = new THREE.Quaternion());
+    qa.set(B[a + 4], B[a + 5], B[a + 6], B[a + 7]); qb.set(B[b + 4], B[b + 5], B[b + 6], B[b + 7]);
+    ball.mesh.quaternion.slerpQuaternions(qa, qb, t);
+    let ka = a + 8, kb = b + 8, i = 0;
+    for (const p of this.players) {
+      const m = p.model;
+      const fa2 = B[ka + 2], fb2 = B[kb + 2];
+      m.root.position.set(L(B[ka], B[kb]), 0, L(B[ka + 1], B[kb + 1]));
+      m.root.rotation.y = fa2 + wrap(fb2 - fa2) * t;
+      m.body.position.set(L(B[ka + 3], B[kb + 3]), L(B[ka + 4], B[kb + 4]), 0);
+      m.body.rotation.set(0, 0, L(B[ka + 5], B[kb + 5]));
+      m.bones.pelvis.position.set(L(B[ka + 6], B[kb + 6]), L(B[ka + 7], B[kb + 7]), L(B[ka + 8], B[kb + 8]));
+      let ja = ka + 9, jb = kb + 9;
+      for (const bn of this.recBones) {
+        qa.set(B[ja], B[ja + 1], B[ja + 2], B[ja + 3]); qb.set(B[jb], B[jb + 1], B[jb + 2], B[jb + 3]);
+        m.bones[bn].quaternion.slerpQuaternions(qa, qb, t);
+        ja += 4; jb += 4;
+      }
+      if (this.blobs) {
+        this._m4.makeScale(1, 1, 1.25);
+        this._m4.setPosition(m.root.position.x + 0.15, 0.02, m.root.position.z - 0.1);
+        this.blobs.setMatrixAt(i, this._m4);
+      }
+      ka += this.recPer; kb += this.recPer; i++;
+    }
+    if (this.blobs) this.blobs.instanceMatrix.needsUpdate = true;
+  }
+
+  // cinematic replay cameras: low tracking shot for the build-up, then behind the goal
+  replayCamera(pos, look) {
+    const r = this.replay, b = this.ball.pos;
+    const s = Math.sign(b.x || 1);
+    const late = r.i > r.goalI - 40;
+    if (late && r.cam === 0) {
+      pos.set(s * (HL + 9), 2.6, b.z * 0.25);
+      look.set(b.x, 0.8, b.z);
+    } else if (late) {
+      pos.set(b.x - s * 9, 1.7, b.z + 7);
+      look.set(b.x + s * 3, 1.0, b.z);
+    } else {
+      pos.set(b.x - s * 6, 4.5, b.z + 13);
+      look.set(b.x + s * 2, 0.8, b.z);
+    }
   }
 
   updateClock(dt) {
@@ -329,10 +470,13 @@ export class Match {
     if (this.half === 1) {
       this.phase = 'halftime';
       this.phaseT = 0;
+      this.say('halfTime', { s: `${this.home.cfg.name} ${this.home.score}, ${this.away.cfg.name} ${this.away.score}` }, 3);
       this.hooks.banner('HALF TIME', `${this.home.cfg.name} ${this.home.score} - ${this.away.score} ${this.away.cfg.name}`, 3500);
     } else {
       this.phase = 'fulltime';
       this.phaseT = 0;
+      const h = this.home.score, a = this.away.score;
+      this.say(h > a ? 'fullTimeWin' : h < a ? 'fullTimeLose' : 'fullTimeDraw', { s: `${this.home.cfg.name} ${this.home.score}, ${this.away.cfg.name} ${this.away.score}` }, 3);
       this.hooks.fullTime();
     }
     this.sound.applause();
@@ -408,7 +552,7 @@ export class Match {
         this.pass(p, aim, thruFire && !passFire ? 'through' : 'ground', nearFree, passHeight);
         return;
       }
-      if (hasBall && B.skill.pressed) { this.skillMove(p, mag > 0.2 ? wdir : null); return; }
+      if (hasBall && B.skill.fire) { this.skillMove(p, B.skill.fireType); return; }
       if (B.shoot.pressed && nearFree) {
         this.gainBall(p, false, true);
         this.shoot(p, 0.75, mag > 0.2 ? wdir : null, true);
@@ -654,6 +798,7 @@ export class Match {
       const vhc = clamp(5 + dist * 0.28, 7.5, 14) * (0.92 + power * 0.16);
       this.kick(p, { mode: 'shot', target: new V3(gx, clamp(1.8 + gauss() * 0.25, 1.1, GH + 0.6), zc), vh: vhc, power: 0.35, kind: 'shot', first: firstTime });
       this.hooks.event('CHIP!');
+      this.say('chip', { n: p.name }, 1);
       return;
     }
     const vh = 15 + power * 14 + p.st.sho * 3;
@@ -667,7 +812,8 @@ export class Match {
     p.action = 'kick';
     p.busy = 0.42;
     p.actionT = 0;
-    p.a.kickT = 0;
+    // start the swing part-way so the foot meets the ball exactly when it is released
+    p.a.kickT = k.first ? 0.36 : 0.16;
     p.a.kickPow = clamp(k.power, 0.2, 1);
     p.desired.multiplyScalar(0.4);
     const dx = k.target.x - p.pos.x, dz = k.target.z - p.pos.z;
@@ -712,24 +858,56 @@ export class Match {
     this.lastKick = { kind: k.kind, team: p.team, id: this.kickId, by: p };
     this.guarantee = k.guarantee ? { to: k.guarantee, id: this.kickId, t: 0 } : null;
     this.sound.kick(k.power);
-    if (k.kind === 'shot') this.stats[p.team.key].shots++;
+    if (k.kind === 'shot') { this.stats[p.team.key].shots++; if (k.mode === 'shot' && k.power > 0.4) this.say('shot', { n: p.name }, 1); }
   }
 
-  skillMove(p, dir) {
-    // quick feint + burst: sharp cut, briefly unstealable, wrong-foots nearby defenders
-    const ang = dir ? Math.atan2(dir.x, dir.z) : p.facing + (Math.random() < 0.5 ? 1 : -1) * 1.2;
-    p.facing = ang;
-    p.fwd.set(Math.sin(ang), 0, Math.cos(ang));
-    p.vel.copy(p.fwd).multiplyScalar(p.maxSpeed(true) * 0.95);
+  // Skill moves. type: 'tap' step-over, 'left'/'right' cut, 'up' rainbow flick, 'down' drag-back.
+  // Directions are relative to where the player is running.
+  skillMove(p, type = 'tap') {
+    if (p.skillCD > 0 || p.pending) return;
+    const ball = this.ball;
+    const f = p.fwd.clone();
+    const left = new V3(f.z, 0, -f.x);
+    const side = type === 'left' ? 1 : type === 'right' ? -1 : (Math.random() < 0.5 ? 1 : -1);
+    let dir, speedK = 0.95, beat = 0.6, name = 'STEP-OVER';
+    if (type === 'left' || type === 'right') { dir = f.clone().multiplyScalar(0.45).addScaledVector(left, side).normalize(); beat = 0.78; name = 'CUT!'; }
+    else if (type === 'down') { dir = f.clone().negate(); speedK = 0.6; beat = 0.7; name = 'DRAG-BACK'; }
+    else if (type === 'up') { dir = f.clone(); beat = 0.85; name = 'RAINBOW FLICK!'; }
+    else dir = f.clone().addScaledVector(left, side * 0.35).normalize();
+    p.skillCD = 0.7;
     p.skillT = 0.55;
-    p.a.kickT = 0.5;
-    p.a.kickPow = 0.25;
-    this.ball.pos.copy(p.pos).addScaledVector(p.fwd, 0.9);
-    this.ball.pos.y = BALL_R;
-    for (const o of p.team.opp.players) {
-      if (hdist(o.pos, p.pos) < 3.5 && Math.random() < 0.75 - o.st.def * 0.35) o.stun = 0.45;
+    p.a.skillT = 0; p.a.skillType = type; p.a.skillSide = -side;
+    const ang = Math.atan2(dir.x, dir.z);
+    if (type === 'up') {
+      // flick the ball up over the defender and run onto it
+      ball.owner = null;
+      ball.pos.set(p.pos.x + f.x * 0.4, 0.3, p.pos.z + f.z * 0.4);
+      ball.vel.set(f.x * 7.5, 6.2, f.z * 7.5);
+      ball.spin = 0;
+      this.kickId++;
+      this.lastKick = { kind: 'skill', team: p.team, id: this.kickId, by: p };
+      this.guarantee = { to: p, id: this.kickId, t: 0, minT: 0.55, maxY: 0.9 };
+      p.cool = 0.5;
+      p.vel.copy(f).multiplyScalar(p.maxSpeed(true));
+      this.sound.kick(0.2);
+    } else {
+      p.lockFacing = null;
+      p.facing = ang;
+      p.fwd.set(Math.sin(ang), 0, Math.cos(ang));
+      p.vel.copy(p.fwd).multiplyScalar(p.maxSpeed(true) * speedK);
+      ball.pos.copy(p.pos).addScaledVector(p.fwd, type === 'down' ? 0.7 : 1.0);
+      ball.pos.y = BALL_R;
+      this.sound.kick(0.12);
     }
-    this.sound.kick(0.15);
+    // wrong-foot defenders close by (more likely if they were committed the other way)
+    for (const o of p.team.opp.players) {
+      const d = hdist(o.pos, p.pos);
+      if (d > 4 || o.isGK) continue;
+      const committed = Math.max(0, -(o.vel.x * dir.x + o.vel.z * dir.z)) / 8;
+      if (Math.random() < beat - o.st.def * 0.35 + committed * 0.3) { o.stun = 0.5; o.a.hitT = 0; o.a.hitBig = false; }
+    }
+    if (p.team.isUser) { this.hooks.event(name); if (Math.random() < 0.5) this.say('skill', { n: p.name }, 1); }
+    if (this.hooks.skill) this.hooks.skill(p, type);
   }
 
   tackle(p, slide) {
@@ -775,6 +953,7 @@ export class Match {
     if (o.skillT > 0) chance -= 0.35;
     if (Math.random() < chance) {
       o.stun = slide ? 0.9 : 0.45;
+      o.a.hitT = 0; o.a.hitBig = slide;
       if (!slide && Math.random() < 0.6) { this.gainBall(p, false); }
       else {
         ball.owner = null;
@@ -783,7 +962,7 @@ export class Match {
         o.cool = 0.4;
       }
       this.sound.kick(0.3);
-      if (p.team.isUser) this.hooks.event('WON IT!');
+      if (p.team.isUser) { this.hooks.event('WON IT!'); this.say('tackle', {}, 1); }
     }
   }
 
@@ -833,7 +1012,8 @@ export class Match {
       } else {
         const sp = Math.hypot(o.vel.x, o.vel.z);
         const n = Math.min(1, sp / 8.6);
-        const stride = 0.5 + 0.5 * Math.sin(o.a.phase * 0.5);
+        // touches synced to the running gait (one per stride on the right foot)
+        const stride = 0.5 + 0.5 * Math.sin(o.model.phase * Math.PI * 2);
         const ahead = 0.48 + n * 0.32 + (o.sprint ? n * 1.0 * stride : n * 0.28 * stride);
         const rx = -o.fwd.z, rz = o.fwd.x;
         const tx = o.pos.x + o.fwd.x * ahead + rx * 0.07;
@@ -912,6 +1092,7 @@ export class Match {
       if (hit && ball.speed > 4 && this.phase === 'play') {
         this.sound.post();
         this.hooks.event('OFF THE WOODWORK!');
+        this.say('post', {}, 2);
       }
       // inside the net
       if (s * b.x > HL && s * b.x < HL + GD + 0.5 && Math.abs(b.z) < GW + 0.2 && b.y < GH + 0.1) {
@@ -929,6 +1110,7 @@ export class Match {
     if (this._netT && this.time - this._netT < 0.5) return;
     this._netT = this.time;
     this.netBulge = { s, t: 0 };
+    this.sound.net();
   }
 
   ballInteractions(dt) {
@@ -947,6 +1129,7 @@ export class Match {
         rate *= (0.55 + d.st.def * 0.8) * (1.35 - o.st.dri * 0.65) * (o.sprint ? 1.35 : 1);
         if (Math.random() < rate * dt) {
           o.stun = 0.35;
+          o.a.hitT = 0; o.a.hitBig = false;
           this.gainBall(d, false);
           if (d.team.isUser) this.hooks.event('BALL WON');
           return;
@@ -962,7 +1145,7 @@ export class Match {
     if (g) {
       g.t += dt;
       const r = g.to;
-      if (hdist(r.pos, ball.pos) < 1.9 && ball.pos.y < 2.7 && r.stun <= 0) { this.guarantee = null; this.gainBall(r, false); return; }
+      if (g.t > (g.minT || 0) && hdist(r.pos, ball.pos) < 1.9 && ball.pos.y < (g.maxY || 2.7) && r.stun <= 0) { this.guarantee = null; this.gainBall(r, false); return; }
       if (sp < 0.6 && hdist(r.pos, ball.pos) > 3) g = this.guarantee = null;
     }
     const afterHeader = this.lastKick.header;
@@ -1066,6 +1249,7 @@ export class Match {
         if (this.lastKick.kind === 'shot' && this.lastKick.team === attackers && Math.abs(b.z) < GW + 4) {
           this.sound.ooh();
           this.hooks.event('SO CLOSE!');
+          this.say('miss', {}, 2);
         }
         if (lt === defenders) {
           this.startRestart('corner', attackers, new V3(s * (HL - 0.4), BALL_R, Math.sign(b.z || 1) * (HW - 0.4)));
@@ -1082,6 +1266,7 @@ export class Match {
   }
 
   goalScored(team) {
+    this.goalTime = this.time;
     team.score++;
     this.phase = 'goal';
     this.phaseT = 0;
@@ -1094,11 +1279,14 @@ export class Match {
     this.ball.owner = null;
     this.hooks.hint('');
     this.hooks.goal(team, own ? `${lt.name} (OG)` : this.scorer.name, own);
+    this.say(own ? 'ownGoal' : team.isUser ? 'goalHome' : 'goalAway', { n: this.scorer.name }, 3);
     if (team.isUser) this.sound.cheer(); else { this.sound.swell(0.4, 3, 700); this.sound.ooh(); }
     this.sound.whistle(1);
     for (const p of this.players) {
       p.recv = null;
       p.a.celebrateStyle = Math.random() < 0.5 ? 0 : 1;
+      p.a.celebClip = (Math.random() * 4) | 0;
+      p.a.sadClip = Math.random() < 0.5 ? 1 : 0;
     }
     this.scorer.a.celebrateStyle = 0;
     this.celebSpot = new V3(team.dir * (HL - 3), 0, Math.sign(this.scorer.pos.z || 1) * (HW - 3));
@@ -1111,6 +1299,7 @@ export class Match {
     this.restart.wait = 0;
     this.sound.whistle(1);
     this.hooks.hint(team.isUser ? 'Tap PASS to kick off' : '');
+    if (this.half === 2 && this.clock === 0) this.say('secondHalf', {}, 2);
   }
 
   startRestart(type, team, spot) {
@@ -1170,6 +1359,7 @@ export class Match {
       r.wait = 0;
     });
     this.hooks.event(labels[type]);
+    if (type === 'corner') this.say('corner', {}, 1);
   }
 
   arrangeCorner(att, spot) {
@@ -1375,7 +1565,8 @@ export class Match {
     }
     const tgt = new V3();
     for (const p of team.players) {
-      if (p.isGK) { this.gkAI(p, dt); continue; }
+      p.jockey = false;
+      if (p.isGK) { p.jockey = true; this.gkAI(p, dt); continue; }
       if (p.busy > 0 || p.stun > 0) continue;
       const userCtl = team.isUser && p === team.controlled;
       if (userCtl && p.manual) continue;
@@ -1415,6 +1606,7 @@ export class Match {
           p.desired.x = p.desired.x * 0.55 + ov.x * 0.5;
           p.desired.z = p.desired.z * 0.55 + ov.z * 0.5;
           p.faceTo = owner.pos;
+          p.jockey = true;
         }
         if (!team.isUser && d < 1.9 && p.tackleCD <= 0 && Math.random() < dt * 1.4 * this.diff.tackle) this.tackle(p, false);
         if (team.isUser && d < 1.7 && p.tackleCD <= 0 && Math.random() < dt * (team.callPress ? 1.5 : 0.55)) this.tackle(p, false);
@@ -1589,6 +1781,11 @@ export class Match {
       p.dribbleDir.copy(base.setY(0).normalize());
       p.sprint = space > 7 && near.d > 2.2;
     }
+    if (near.d < 2.4 && (p.skillCD || 0) <= 0 && Math.random() < dt * 0.9 * p.st.dri * this.diff.press) {
+      this.skillMove(p, Math.random() < 0.5 ? 'left' : 'right');
+      p.dribbleDir.copy(p.fwd);
+      return;
+    }
     const sp = p.maxSpeed(p.sprint) * (near.d < 1.3 ? 0.7 : 1);
     p.desired.copy(p.dribbleDir).multiplyScalar(sp);
     // don't dribble out of play
@@ -1723,11 +1920,13 @@ export class Match {
     if (sv.catch) {
       this.gainBall(gk, true);
       this.hooks.event('SAVED!');
+      this.say('catch', {}, 2);
     } else {
       const s = Math.sign(gk.team.goalX);
       ball.vel.set(-s * rand(3, 8), rand(2, 6), Math.sign(sv.lateral || 1) * rand(3, 8));
       gk.cool = 0.6;
       this.hooks.event('WHAT A SAVE!');
+      this.say('save', {}, 2);
     }
     this.sound.thud(8);
     this.sound.ooh();
@@ -1826,16 +2025,24 @@ export class Match {
       const sp = Math.hypot(p.vel.x, p.vel.z);
       let tf = null;
       if (p.lockFacing !== null && p.busy > 0) tf = p.lockFacing;
+      else if (p.jockey && p.faceTo && sp < 6.5 && ball.owner !== p) {
+        // jockeying defenders / keepers shuffle while still facing the ball
+        const fx = p.faceTo.x - p.pos.x, fz = p.faceTo.z - p.pos.z;
+        if (fx * fx + fz * fz > 0.5) tf = Math.atan2(fx, fz);
+      }
       else if (sp > 0.8) tf = Math.atan2(p.vel.x, p.vel.z);
       else if (p.lockFacing !== null) tf = p.lockFacing;
       else if (p.faceTo) {
         const fx = p.faceTo.x - p.pos.x, fz = p.faceTo.z - p.pos.z;
         if (fx * fx + fz * fz > 0.5) tf = Math.atan2(fx, fz);
       }
+      p.turnRate = 0;
       if (tf !== null) {
         const rate = ball.owner === p ? (p.sprint ? 5.5 : 7.5) : 10;
         const d = wrap(tf - p.facing);
-        p.facing = wrap(p.facing + clamp(d, -rate * dt, rate * dt));
+        const step = clamp(d, -rate * dt, rate * dt);
+        p.facing = wrap(p.facing + step);
+        p.turnRate = step / Math.max(dt, 1e-3);
         p.fwd.set(Math.sin(p.facing), 0, Math.cos(p.facing));
       }
       const sprinting = p.sprint && sp > RUN * 0.92;
@@ -1869,12 +2076,14 @@ export class Match {
       a.speed = sp;
       if (sp > 0.15) a.phase += dt * (4.3 + sp * 0.66);
       const adv = (k, dur) => { if (a[k] >= 0) { a[k] += dt / dur; if (a[k] > 1) a[k] = -1; } };
-      adv('kickT', 0.42); adv('tackleT', 0.5); adv('slideT', 1.0); adv('headerT', 0.5); adv('throwT', 0.55);
+      adv('kickT', 0.42); adv('tackleT', 0.5); adv('slideT', 1.0); adv('headerT', 0.5); adv('throwT', 0.55); adv('hitT', 0.7); adv('skillT', 0.55);
+      a.moveAngle = sp > 0.3 ? wrap(Math.atan2(p.vel.x, p.vel.z) - p.facing) : 0;
+      a.turnRate = p.turnRate || 0;
       if (a.diveT >= 0) { a.diveT += dt / 1.25; if (a.diveT > 1 || p.action !== 'dive') a.diveT = -1; }
       a.hold = ball.owner === p && ball.held && !a.throwReady && p.action !== 'throw';
       a.ready = p.isGK && this.phase === 'play' && ball.owner !== p && HL - Math.abs(ball.pos.x) < 35 && Math.sign(ball.pos.x) === Math.sign(p.team.goalX) && sp < 3;
       if (this.phase !== 'goal') { a.celebrate = Math.max(0, a.celebrate - dt * 2); a.sad = Math.max(0, a.sad - dt); }
-      animateModel(p.model, a, this.time);
+      animateModel(p.model, a, this.time, dt);
       const root = p.model.root;
       root.position.set(p.pos.x, 0, p.pos.z);
       root.rotation.y = p.facing;

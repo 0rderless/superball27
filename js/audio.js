@@ -150,6 +150,84 @@ export class Sound {
   }
 
   ooh() { this.swell(0.45, 1.8, 520); }
-  cheer() { this.swell(0.9, 5.5, 900); this.swell(0.5, 6, 1600); }
+  cheer() { this.swell(0.9, 5.5, 900); this.swell(0.5, 6, 1600); this.horn(); }
   applause() { this.swell(0.35, 2.5, 2200); }
+  groan() { this.swell(0.35, 2.2, 380); }
+
+  // stadium air horn
+  horn() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime + 0.15;
+    for (const fr of [233, 294, 349]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(fr, t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.05, t + 0.05);
+      g.gain.setValueAtTime(0.05, t + 1.1);
+      g.gain.linearRampToValueAtTime(0, t + 1.4);
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass'; f.frequency.value = 1800;
+      o.connect(f).connect(g).connect(this.master);
+      o.start(t); o.stop(t + 1.45);
+    }
+  }
+
+  // ball hitting the net
+  net() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const n = ctx.createBufferSource();
+    n.buffer = this.white;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 3200; f.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.25, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    n.connect(f).connect(g).connect(this.master);
+    n.start(t, 0, 0.4);
+  }
+
+  // rhythmic crowd chant: clap clap ... clap clap clap "Zorp-F-C!"
+  chant() {
+    if (!this.ctx || this._chanting) return;
+    this._chanting = true;
+    const ctx = this.ctx, t0 = ctx.currentTime + 0.05;
+    const beats = [0, 0.32, 0.96, 1.12, 1.28, 1.92, 2.24, 2.88, 3.04, 3.2];
+    for (let r = 0; r < 2; r++) {
+      for (const b of beats) {
+        const t = t0 + r * 3.84 + b;
+        const n = ctx.createBufferSource();
+        n.buffer = this.white;
+        const f = ctx.createBiquadFilter();
+        f.type = 'bandpass'; f.frequency.value = 1400; f.Q.value = 0.6;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.22, t + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+        n.connect(f).connect(g).connect(this.master);
+        n.start(t, Math.random() * 0.5, 0.15);
+      }
+      // sung "Zorp - F - C" as three voiced vowels
+      [[1.92, 196, 0.28], [2.24, 196, 0.28], [2.56, 247, 0.5]].forEach(([b, fr, d]) => {
+        const t = t0 + r * 3.84 + b;
+        for (const det of [-6, 0, 5, 11]) {
+          const o = ctx.createOscillator();
+          o.type = 'sawtooth';
+          o.frequency.value = fr * Math.pow(2, det / 1200);
+          const f = ctx.createBiquadFilter();
+          f.type = 'bandpass'; f.frequency.value = 700; f.Q.value = 1.5;
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(0.035, t + 0.04);
+          g.gain.setValueAtTime(0.035, t + d - 0.05);
+          g.gain.linearRampToValueAtTime(0, t + d);
+          o.connect(f).connect(g).connect(this.master);
+          o.start(t); o.stop(t + d + 0.02);
+        }
+      });
+    }
+    setTimeout(() => { this._chanting = false; }, 8500);
+  }
 }

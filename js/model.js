@@ -1,391 +1,456 @@
 import * as THREE from '../lib/three.module.min.js';
+import { GLTFLoader } from '../lib/GLTFLoader.js';
+import * as SkeletonUtils from '../lib/SkeletonUtils.js';
+import { mergeGeometries } from '../lib/BufferGeometryUtils.js';
 
-// Procedural footballer: jointed humanoid with kit textures, faces and hair.
-// The model faces +z; its left side is +x.
+// Footballers built on Quaternius' CC0 Universal Animation Library mannequin (assets/player.glb):
+// motion-captured locomotion + one-shot clips, with football moves (kicks, dives, holds) layered on
+// procedurally. Kits, skin, hair and faces are painted in the shader from each vertex's body region,
+// so every player is a single skinned draw call.
 
 export const SKINS = ['#f2cdb0', '#e1ae8a', '#c78b63', '#a56a43', '#7a4a2b', '#55331f'];
 export const HAIRS = ['#15100c', '#3a2616', '#6a4324', '#b5834a', '#e0be78', '#0a0a0a'];
 
-const G = {};
-function geos() {
-  if (G.ready) return G;
-  G.ready = true;
-  G.torso = new THREE.CylinderGeometry(0.205, 0.165, 0.56, 20, 1);
-  G.chest = new THREE.SphereGeometry(0.2, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.5);
-  G.shoulder = new THREE.SphereGeometry(0.095, 12, 8);
-  G.waist = new THREE.CylinderGeometry(0.172, 0.19, 0.16, 16);
-  G.shortsLeg = new THREE.CylinderGeometry(0.105, 0.1, 0.2, 12);
-  G.neck = new THREE.CylinderGeometry(0.055, 0.062, 0.13, 10);
-  G.head = new THREE.SphereGeometry(0.115, 22, 16);
-  G.hair = new THREE.SphereGeometry(0.122, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.5);
-  G.hairBack = new THREE.SphereGeometry(0.12, 16, 10, Math.PI * 0.6, Math.PI * 0.8, Math.PI * 0.3, Math.PI * 0.42);
-  G.ear = new THREE.SphereGeometry(0.026, 8, 6);
-  G.nose = new THREE.SphereGeometry(0.022, 8, 6);
-  G.upperArm = new THREE.CapsuleGeometry(0.05, 0.21, 4, 10);
-  G.sleeve = new THREE.CylinderGeometry(0.068, 0.06, 0.17, 12);
-  G.forearm = new THREE.CapsuleGeometry(0.041, 0.19, 4, 10);
-  G.hand = new THREE.SphereGeometry(0.048, 10, 8);
-  G.thigh = new THREE.CapsuleGeometry(0.082, 0.29, 4, 12);
-  G.shin = new THREE.CapsuleGeometry(0.057, 0.3, 4, 12);
-  G.sockTop = new THREE.CylinderGeometry(0.066, 0.064, 0.05, 12);
-  const boot = new THREE.BoxGeometry(0.1, 0.075, 0.27, 1, 1, 2);
-  // taper the toe a little
-  const p = boot.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const z = p.getZ(i);
-    if (z > 0.1) { p.setX(i, p.getX(i) * 0.75); if (p.getY(i) > 0) p.setY(i, p.getY(i) * 0.4); }
+// body regions (aRegion attribute)
+const R = { SKIN: 0, HEAD: 1, SHIRT: 2, ARM: 3, HAND: 4, SHORTS: 5, LEG: 6, SOCKTOP: 7, SOCK: 8, BOOT: 9 };
+
+let A = null; // loaded assets
+
+export async function loadPlayerAssets(url = 'assets/player.glb') {
+  if (A) return A;
+  const gltf = await new GLTFLoader().loadAsync(url);
+  const scene = gltf.scene;
+  scene.updateMatrixWorld(true);
+  const meshes = [];
+  scene.traverse(o => { if (o.isSkinnedMesh) meshes.push(o); });
+  const base = meshes[0];
+  const bones = {};
+  base.skeleton.bones.forEach(b => { bones[b.name] = b; });
+  const bp = n => bones[n].getWorldPosition(new THREE.Vector3());
+
+  // merge the body + joint primitives into one geometry (both use the same skeleton)
+  const geos = meshes.map(m => {
+    const g = new THREE.BufferGeometry();
+    for (const k of ['position', 'normal', 'skinIndex', 'skinWeight']) g.setAttribute(k, m.geometry.attributes[k]);
+    g.setIndex(m.geometry.index);
+    return g;
+  });
+  const geo = mergeGeometries(geos, false);
+
+  // classify every vertex by its dominant bone (and how far along that bone it sits)
+  const pos = geo.attributes.position, si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight;
+  const n = pos.count;
+  const region = new Float32Array(n), bind = new Float32Array(n * 3);
+  const v = new THREE.Vector3();
+  const along = (p, a, b) => { const ab = bp(b).sub(bp(a)); return p.clone().sub(bp(a)).dot(ab) / ab.lengthSq(); };
+  const names = base.skeleton.bones.map(b => b.name);
+  const pelvisY = bp('pelvis').y;
+  const stats = { headMaxZ: -1, headTop: 0, backZ: 1, chestZ: -1 };
+  for (let i = 0; i < n; i++) {
+    let best = 0, bw = -1;
+    for (let k = 0; k < 4; k++) { const w = sw.getComponent(i, k); if (w > bw) { bw = w; best = si.getComponent(i, k); } }
+    v.fromBufferAttribute(pos, i).applyMatrix4(base.matrixWorld);
+    bind[i * 3] = v.x; bind[i * 3 + 1] = v.y; bind[i * 3 + 2] = v.z;
+    const nm = names[best];
+    const side = nm.endsWith('_l') ? 'l' : 'r';
+    let r;
+    if (nm === 'Head') r = R.HEAD;
+    else if (nm === 'neck_01') r = R.SKIN;
+    else if (/^spine|^clavicle/.test(nm)) r = R.SHIRT;
+    else if (nm === 'pelvis' || nm === 'root') r = v.y > pelvisY + 0.08 ? R.SHIRT : R.SHORTS;
+    else if (/^upperarm/.test(nm)) r = along(v, 'upperarm_' + side, 'lowerarm_' + side) < 0.5 ? R.SHIRT : R.ARM;
+    else if (/^lowerarm/.test(nm)) r = R.ARM;
+    else if (/^(hand|index|middle|pinky|ring|thumb)/.test(nm)) r = R.HAND;
+    else if (/^thigh/.test(nm)) r = along(v, 'thigh_' + side, 'calf_' + side) < 0.42 ? R.SHORTS : R.LEG;
+    else if (/^calf/.test(nm)) { const t = along(v, 'calf_' + side, 'foot_' + side); r = t < 0.1 ? R.LEG : t < 0.2 ? R.SOCKTOP : R.SOCK; }
+    else if (/^(foot|ball)/.test(nm)) r = R.BOOT;
+    else r = R.SKIN;
+    region[i] = r;
+    if (r === R.HEAD) { stats.headMaxZ = Math.max(stats.headMaxZ, v.z); stats.headTop = Math.max(stats.headTop, v.y); }
+    if (r === R.SHIRT && Math.abs(v.y - (pelvisY + 0.32)) < 0.05 && Math.abs(v.x) < 0.06) { stats.backZ = Math.min(stats.backZ, v.z); stats.chestZ = Math.max(stats.chestZ, v.z); }
   }
-  boot.computeVertexNormals();
-  G.boot = boot;
-  return G;
+  geo.setAttribute('aRegion', new THREE.BufferAttribute(region, 1));
+  geo.setAttribute('aBind', new THREE.BufferAttribute(bind, 3));
+  geo.computeBoundingSphere();
+
+  const skinned = new THREE.SkinnedMesh(geo, new THREE.MeshStandardMaterial());
+  skinned.name = 'Footballer';
+  skinned.bind(base.skeleton, base.bindMatrix);
+  base.parent.add(skinned);
+  for (const m of meshes) m.parent.remove(m);
+
+  const clips = {};
+  for (const c of gltf.animations) clips[c.name] = c;
+  const headY = bp('Head').y;
+  A = {
+    scene, clips, stats,
+    face: { eyeX: 0.034, eyeY: headY + (stats.headTop - headY) * 0.47, frontZ: stats.headMaxZ },
+    hairY: headY + (stats.headTop - headY) * 0.78,
+    numY: pelvisY + 0.33,
+    pelvisY,
+  };
+  A.poses = {
+    hold: samplePose('Walk_Carry_Loop', 0.2, /^(upperarm|lowerarm|hand|clavicle)/),
+    throw: samplePose('OverhandThrow', 0.32, /^(upperarm|lowerarm|hand|clavicle|spine)/),
+  };
+  return A;
 }
 
-// ---- texture atlas (512x512): shirt [0..256]x[0..256], face [256..512]x[0..128], white patch bottom-right ----
-function drawShirt(g, kit, number, teamTag) {
-  g.fillStyle = kit.shirt;
-  g.fillRect(0, 0, 256, 256);
-  if (kit.pattern === 'stripes') {
-    g.fillStyle = kit.shirt2;
-    for (let x = 0; x < 256; x += 32) g.fillRect(x + 22, 0, 10, 256);
-  } else if (kit.pattern === 'sash') {
-    g.fillStyle = kit.shirt2;
-    g.fillRect(56, 0, 14, 256);
-    g.fillRect(186, 0, 14, 256);
-    g.beginPath();
-    g.moveTo(0, 60); g.lineTo(26, 60); g.lineTo(-10, 200); g.lineTo(-36, 200); g.closePath();
-    g.moveTo(256, 60); g.lineTo(282, 60); g.lineTo(246, 200); g.lineTo(220, 200); g.closePath();
-    g.fillStyle = 'rgba(255,255,255,0.85)';
-    g.fill();
-  }
-  const grd = g.createLinearGradient(0, 0, 0, 256);
-  grd.addColorStop(0, 'rgba(255,255,255,0.08)');
-  grd.addColorStop(1, 'rgba(0,0,0,0.18)');
-  g.fillStyle = grd;
-  g.fillRect(0, 0, 256, 256);
-  g.fillStyle = kit.trim;
-  g.fillRect(0, 0, 256, 9);
-  g.font = '900 118px "Arial Black", Arial, sans-serif';
+// sample a clip at time t into { boneName: quaternion } (optionally only some bones)
+function samplePose(clipName, t, filter) {
+  const clip = A.clips[clipName];
+  if (!clip) return null;
+  const tmp = SkeletonUtils.clone(A.scene);
+  const mixer = new THREE.AnimationMixer(tmp);
+  mixer.clipAction(clip).play();
+  mixer.setTime(clip.duration * t);
+  const pose = {};
+  tmp.traverse(o => { if (o.isBone && (!filter || filter.test(o.name))) pose[o.name] = o.quaternion.clone(); });
+  return pose;
+}
+
+function restPose(filter) {
+  const pose = {};
+  A.scene.traverse(o => { if (o.isBone && filter.test(o.name)) pose[o.name] = o.quaternion.clone(); });
+  return pose;
+}
+
+function numberTexture(num, color) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.font = '900 104px "Arial Black", Arial, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.lineWidth = 7;
-  g.strokeStyle = 'rgba(0,0,0,0.35)';
-  g.strokeText(String(number), 128, 140);
-  g.fillStyle = kit.number;
-  g.fillText(String(number), 128, 140);
-  g.fillStyle = kit.trim;
-  g.beginPath(); g.arc(30, 62, 11, 0, Math.PI * 2); g.fill();
-  g.fillStyle = kit.shirt2;
-  g.beginPath(); g.arc(30, 62, 6, 0, Math.PI * 2); g.fill();
-  g.font = '900 26px Arial, sans-serif';
-  g.fillStyle = kit.number;
-  g.fillText(teamTag, 0, 112);
-  g.fillText(teamTag, 256, 112);
-}
-
-function drawFace(g, skin) {
-  g.fillStyle = skin;
-  g.fillRect(0, 0, 256, 128);
-  const cx = 64; // u = 0.25 is the front of a THREE sphere
-  g.fillStyle = 'rgba(0,0,0,0.12)';
-  g.fillRect(0, 96, 256, 32);
-  g.fillStyle = 'rgba(30,18,10,0.85)';
-  g.fillRect(cx - 17, 50, 12, 3);
-  g.fillRect(cx + 5, 50, 12, 3);
-  g.fillStyle = '#fff';
-  g.beginPath(); g.ellipse(cx - 11, 58, 5, 3, 0, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.ellipse(cx + 11, 58, 5, 3, 0, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#2a1a10';
-  g.beginPath(); g.arc(cx - 11, 58, 2.4, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.arc(cx + 11, 58, 2.4, 0, Math.PI * 2); g.fill();
-  g.strokeStyle = 'rgba(90,30,30,0.8)';
-  g.lineWidth = 2.5;
-  g.beginPath(); g.moveTo(cx - 8, 80); g.quadraticCurveTo(cx, 83, cx + 8, 80); g.stroke();
-}
-
-function atlasTexture(kit, number, teamTag, skin) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 512;
-  const g = c.getContext('2d');
-  g.fillStyle = '#ffffff';
-  g.fillRect(0, 0, 512, 512);
-  drawShirt(g, kit, number, teamTag);
-  g.save();
-  g.translate(256, 0);
-  drawFace(g, skin);
-  g.restore();
+  g.lineWidth = 8;
+  g.strokeStyle = 'rgba(0,0,0,0.45)';
+  g.strokeText(String(num), 64, 70);
+  g.fillStyle = color;
+  g.fillText(String(num), 64, 70);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
   return t;
 }
 
-// uv remap into atlas regions (v is bottom-up)
-const REGION = {
-  shirt: [0, 0.5, 0.5, 0.5],      // u0, v0, du, dv
-  face: [0.5, 0.75, 0.5, 0.25],
-  white: [0.8, 0.1, 0, 0],
-};
-
-const BONE_NAMES = ['body', 'hips', 'spine', 'head', 'lSh', 'lEl', 'rSh', 'rEl', 'lHip', 'lKnee', 'lAnk', 'rHip', 'rKnee', 'rAnk'];
-
-function mergeParts(parts, boneIndex) {
-  let nv = 0, ni = 0;
-  for (const p of parts) { nv += p.geo.attributes.position.count; ni += p.geo.index.count; }
-  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), col = new Float32Array(nv * 3);
-  const si = new Uint16Array(nv * 4), sw = new Float32Array(nv * 4);
-  const idx = new Uint32Array(ni);
-  let vo = 0, io = 0;
-  for (const p of parts) {
-    const g = p.geo;
-    const P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv;
-    const [u0, v0, du, dv] = REGION[p.region];
-    const bi = boneIndex[p.bone];
-    for (let i = 0; i < P.count; i++) {
-      const o = vo + i;
-      pos[o * 3] = P.getX(i); pos[o * 3 + 1] = P.getY(i); pos[o * 3 + 2] = P.getZ(i);
-      nor[o * 3] = N.getX(i); nor[o * 3 + 1] = N.getY(i); nor[o * 3 + 2] = N.getZ(i);
-      uv[o * 2] = u0 + U.getX(i) * du; uv[o * 2 + 1] = v0 + U.getY(i) * dv;
-      col[o * 3] = p.color.r; col[o * 3 + 1] = p.color.g; col[o * 3 + 2] = p.color.b;
-      si[o * 4] = bi; sw[o * 4] = 1;
-    }
-    const I = g.index;
-    for (let i = 0; i < I.count; i++) idx[io + i] = I.getX(i) + vo;
-    vo += P.count; io += I.count;
+const VERT_HEAD = /* glsl */`
+attribute float aRegion;
+attribute vec3 aBind;
+varying float vRegion;
+varying vec3 vBind;
+`;
+const FRAG_HEAD = /* glsl */`
+varying float vRegion;
+varying vec3 vBind;
+uniform vec3 uSkin, uHair, uShirt, uShirt2, uTrim, uShorts, uSocks, uSockTop, uBoots, uGloves, uNumCol;
+uniform float uPattern, uLong, uHairY, uBackZ, uChestZ, uNumY, uCollarY;
+uniform vec3 uEye;
+uniform sampler2D uNumTex;
+`;
+const FRAG_COLOR = /* glsl */`
+vec3 kc = uSkin;
+float rg = floor(vRegion + 0.5);
+if (rg == 1.0) {
+  // head: hair line drops lower at the back, procedural face at the front
+  float hy = uHairY - max(0.0, -vBind.z) * 1.3 - max(0.0, abs(vBind.x) - 0.05) * 0.4;
+  kc = mix(uSkin, uHair, smoothstep(hy - 0.006, hy + 0.006, vBind.y));
+  if (vBind.z > uEye.z - 0.06) {
+    vec2 e = vec2(abs(vBind.x) - uEye.x, (vBind.y - uEye.y) * 1.7);
+    float eye = 1.0 - smoothstep(0.008, 0.011, length(e));
+    kc = mix(kc, vec3(0.97), (1.0 - smoothstep(0.011, 0.014, length(e))) * 0.85);
+    kc = mix(kc, vec3(0.05, 0.035, 0.03), eye);
+    float brow = (1.0 - smoothstep(0.0025, 0.005, abs(vBind.y - uEye.y - 0.021 + abs(vBind.x) * 0.08))) * (1.0 - smoothstep(0.011, 0.02, abs(abs(vBind.x) - uEye.x)));
+    kc = mix(kc, uHair * 0.9, brow);
+    float mouth = (1.0 - smoothstep(0.0018, 0.004, abs(vBind.y - uEye.y + 0.058 - vBind.x * vBind.x * 4.0))) * (1.0 - smoothstep(0.012, 0.02, abs(vBind.x)));
+    kc = mix(kc, kc * vec3(0.62, 0.42, 0.42), mouth);
+    float nose = (1.0 - smoothstep(0.004, 0.012, abs(vBind.x))) * (1.0 - smoothstep(0.0, 0.03, abs(vBind.y - uEye.y + 0.03)));
+    kc *= 1.0 - nose * 0.12;
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
-  geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
-  geo.setIndex(new THREE.BufferAttribute(idx, 1));
-  return geo;
+} else if (rg == 2.0) {
+  kc = uShirt;
+  if (uPattern > 0.5 && uPattern < 1.5) {
+    // vertical stripes
+    float f = fract(vBind.x * 8.0 + 0.5);
+    float s = smoothstep(0.42, 0.46, f) * (1.0 - smoothstep(0.66, 0.7, f));
+    kc = mix(uShirt, uShirt2, s);
+  } else if (uPattern > 1.5) {
+    // diagonal sash across the front + darker side panels
+    float d = vBind.x * 0.85 + (vBind.y - uNumY);
+    float sash = (1.0 - smoothstep(0.045, 0.055, abs(d))) * step(0.0, vBind.z);
+    kc = mix(kc, uShirt2, smoothstep(0.13, 0.16, abs(vBind.x)) * 0.8);
+    kc = mix(kc, uTrim, sash * 0.9);
+  }
+  kc = mix(kc, uTrim, smoothstep(uCollarY - 0.01, uCollarY, vBind.y));
+  // number on the back, small crest on the left chest
+  if (vBind.z < uBackZ + 0.05) {
+    vec2 uv = vec2(0.5 - vBind.x / 0.24, (vBind.y - uNumY) / 0.24 + 0.5);
+    if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
+      vec4 nt = texture2D(uNumTex, uv);
+      kc = mix(kc, nt.rgb, nt.a);
+    }
+  }
+  if (vBind.z > uChestZ - 0.05) {
+    float crest = 1.0 - smoothstep(0.016, 0.02, length(vec2(vBind.x - 0.075, vBind.y - uNumY - 0.1)));
+    kc = mix(kc, uTrim, crest);
+  }
+} else if (rg == 3.0) kc = mix(uSkin, uShirt, uLong);
+else if (rg == 4.0) kc = uGloves;
+else if (rg == 5.0) kc = uShorts;
+else if (rg == 6.0) kc = uSkin;
+else if (rg == 7.0) kc = uSockTop;
+else if (rg == 8.0) kc = uSocks;
+else if (rg == 9.0) kc = uBoots;
+vec4 diffuseColor = vec4( kc, opacity );
+`;
+
+function kitMaterial(kit, skinHex, hairHex, hairStyle, number) {
+  const C = h => new THREE.Color(h);
+  const hairOffset = [0.0, 0.03, -0.012, -0.03, -0.02, 0.06][hairStyle % 6]; // 1 = buzz, 5 = shaved
+  const u = {
+    uSkin: { value: C(skinHex) }, uHair: { value: C(hairHex) },
+    uShirt: { value: C(kit.shirt) }, uShirt2: { value: C(kit.shirt2) }, uTrim: { value: C(kit.trim) },
+    uShorts: { value: C(kit.shorts) }, uSocks: { value: C(kit.socks) }, uSockTop: { value: C(kit.sockTop) },
+    uBoots: { value: C(kit.boots) }, uGloves: { value: C(kit.gloves || skinHex) }, uNumCol: { value: C(kit.number) },
+    uPattern: { value: kit.pattern === 'stripes' ? 1 : kit.pattern === 'sash' ? 2 : 0 },
+    uLong: { value: kit.longSleeve ? 1 : 0 },
+    uHairY: { value: A.hairY + hairOffset },
+    uBackZ: { value: A.stats.backZ }, uChestZ: { value: A.stats.chestZ },
+    uNumY: { value: A.numY }, uCollarY: { value: A.numY + 0.235 },
+    uEye: { value: new THREE.Vector3(A.face.eyeX, A.face.eyeY, A.face.frontZ) },
+    uNumTex: { value: numberTexture(number, kit.number) },
+  };
+  const m = new THREE.MeshStandardMaterial({ roughness: 0.62, metalness: 0, envMapIntensity: 0.9 });
+  m.userData.u = u;
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = VERT_HEAD + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRegion = aRegion;\nvBind = aBind;');
+    sh.fragmentShader = FRAG_HEAD + sh.fragmentShader.replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAG_COLOR);
+  };
+  m.customProgramCacheKey = () => 'footballer-v1';
+  return m;
 }
 
-// One rigidly-skinned mesh per player: a single draw call, animated through bones.
-export function createPlayerModel({ kit, skin, hair, style, number, teamTag }) {
-  const g = geos();
-  const skinCol = SKINS[skin % SKINS.length];
-  const hairCol = HAIRS[hair % HAIRS.length];
-  const C = hex => new THREE.Color(hex);
-  const WHITE = C('#ffffff');
-  const cShirt = C(kit.shirt), cSkin = C(skinCol), cShorts = C(kit.shorts), cSocks = C(kit.socks);
-  const cSockTop = C(kit.sockTop), cBoots = C(kit.boots), cHair = C(hairCol), cHand = kit.gloves ? C(kit.gloves) : cSkin;
-  const cArm = kit.longSleeve ? cShirt : cSkin;
+// ----------------------------------------------------------------------------------------------
+const LOCO = ['Idle_Loop', 'Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop', 'Jog_Bwd_Loop', 'Jog_Left_Loop', 'Jog_Right_Loop', 'Crouch_Idle_Loop'];
+// metres travelled per animation cycle, used to keep the feet planted at any speed
+const STRIDE = { Walk_Loop: 1.9, Jog_Fwd_Loop: 3.6, Sprint_Loop: 5.4, Jog_Bwd_Loop: 2.6, Jog_Left_Loop: 2.6, Jog_Right_Loop: 2.6 };
 
-  // ---- skeleton ----
-  const B = {};
-  for (const n of BONE_NAMES) { B[n] = new THREE.Bone(); B[n].name = n; }
-  B.body.add(B.hips); B.hips.position.y = 0.97;
-  B.hips.add(B.spine); B.spine.position.y = 0.03;
-  B.spine.add(B.head); B.head.position.y = 0.69;
-  B.spine.add(B.lSh); B.lSh.position.set(0.235, 0.5, 0);
-  B.spine.add(B.rSh); B.rSh.position.set(-0.235, 0.5, 0);
-  B.lSh.add(B.lEl); B.lEl.position.y = -0.3;
-  B.rSh.add(B.rEl); B.rEl.position.y = -0.3;
-  B.hips.add(B.lHip); B.lHip.position.set(0.1, -0.05, 0);
-  B.hips.add(B.rHip); B.rHip.position.set(-0.1, -0.05, 0);
-  B.lHip.add(B.lKnee); B.lKnee.position.y = -0.44;
-  B.rHip.add(B.rKnee); B.rKnee.position.y = -0.44;
-  B.lKnee.add(B.lAnk); B.lAnk.position.y = -0.4;
-  B.rKnee.add(B.rAnk); B.rAnk.position.y = -0.4;
-  B.body.updateMatrixWorld(true);
-
-  const parts = [];
-  const tmpObj = new THREE.Object3D();
-  // add a primitive in a bone's local space
-  const add = (geo, bone, color, region, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, rx = 0) => {
-    tmpObj.position.set(x, y, z);
-    tmpObj.rotation.set(rx, 0, 0);
-    tmpObj.scale.set(sx, sy, sz);
-    tmpObj.updateMatrix();
-    const ge = geo.clone();
-    ge.applyMatrix4(tmpObj.matrix);
-    ge.applyMatrix4(B[bone].matrixWorld);
-    parts.push({ geo: ge, bone, color, region });
-  };
-
-  add(g.waist, 'hips', cShorts, 'white', 0, -0.03, 0);
-  add(g.torso, 'spine', WHITE, 'shirt', 0, 0.28, 0, 1, 1, 0.62);
-  add(g.chest, 'spine', cShirt, 'white', 0, 0.555, 0, 1.02, 0.32, 0.63);
-  for (const sx of [1, -1]) add(g.shoulder, 'spine', cShirt, 'white', sx * 0.205, 0.5, 0, 1.05, 0.85, 0.95);
-  add(g.neck, 'spine', cSkin, 'white', 0, 0.63, 0);
-  add(g.head, 'head', WHITE, 'face', 0, 0.1, 0.005, 0.9, 1.08, 0.98);
-  add(g.nose, 'head', cSkin, 'white', 0, 0.085, 0.115);
-  for (const sx of [1, -1]) add(g.ear, 'head', cSkin, 'white', sx * 0.103, 0.095, 0);
-  if (style === 1) add(g.hair, 'head', cHair.clone().lerp(cSkin, 0.25), 'white', 0, 0.1, 0, 0.9, 1.0, 0.97, -0.35);
-  else if (style === 3) add(g.hair, 'head', cHair, 'white', 0, 0.115, -0.008, 1.12, 1.2, 1.12, -0.32);
-  else if (style === 2) add(g.hair, 'head', cHair, 'white', 0, 0.115, -0.008, 0.93, 1.18, 1.0, -0.32);
-  else add(g.hair, 'head', cHair, 'white', 0, 0.115, -0.008, 0.92, 1.02, 1.0, -0.32);
-  if (style === 4) add(g.hairBack, 'head', cHair, 'white', 0, 0.07, -0.01, 1.0, 1.25, 1.05);
-  for (const s of ['l', 'r']) {
-    add(g.sleeve, s + 'Sh', cShirt, 'white', 0, -0.07, 0);
-    add(g.upperArm, s + 'Sh', cArm, 'white', 0, -0.15, 0);
-    add(g.forearm, s + 'El', cArm, 'white', 0, -0.13, 0);
-    add(g.hand, s + 'El', cHand, 'white', 0, -0.285, 0.005, 0.8, 1.15, 1);
-    add(g.shortsLeg, s + 'Hip', cShorts, 'white', 0, -0.07, 0);
-    add(g.thigh, s + 'Hip', cSkin, 'white', 0, -0.22, 0);
-    add(g.shin, s + 'Knee', cSocks, 'white', 0, -0.19, 0);
-    add(g.sockTop, s + 'Knee', cSockTop, 'white', 0, -0.035, 0);
-    add(g.boot, s + 'Ank', cBoots, 'white', 0, -0.035, 0.05);
-  }
-
-  const boneIndex = {};
-  BONE_NAMES.forEach((n, i) => { boneIndex[n] = i; });
-  const geo = mergeParts(parts, boneIndex);
-  for (const p of parts) p.geo.dispose();
-  const material = new THREE.MeshStandardMaterial({ map: atlasTexture(kit, number, teamTag, skinCol), vertexColors: true, roughness: 0.62, envMapIntensity: 0.9 });
-  const mesh = new THREE.SkinnedMesh(geo, material);
-  mesh.add(B.body);
-  mesh.bind(new THREE.Skeleton(BONE_NAMES.map(n => B[n])));
+export function createPlayerModel({ kit, skin, hair, style, number }) {
+  if (!A) throw new Error('loadPlayerAssets() first');
+  const inner = SkeletonUtils.clone(A.scene);
+  let mesh = null;
+  inner.traverse(o => { if (o.isSkinnedMesh) mesh = o; });
+  mesh.material = kitMaterial(kit, SKINS[skin % SKINS.length], HAIRS[hair % HAIRS.length], style, number);
   mesh.castShadow = true;
   mesh.frustumCulled = false;
-
+  const bones = {};
+  inner.traverse(o => { if (o.isBone) bones[o.name] = o; });
   const root = new THREE.Group();
-  root.add(mesh);
+  const body = new THREE.Group(); // lean / dive / jump offsets
+  root.add(body);
+  body.add(inner);
+  const mixer = new THREE.AnimationMixer(inner);
+  const actions = {};
+  for (const name of Object.keys(A.clips)) {
+    const act = mixer.clipAction(A.clips[name]);
+    act.enabled = true;
+    act.setEffectiveWeight(0);
+    actions[name] = act;
+  }
+  for (const n of LOCO) actions[n].play();
   return {
-    root, mesh, body: B.body, hips: B.hips, spine: B.spine, head: B.head,
-    lSh: B.lSh, lEl: B.lEl, rSh: B.rSh, rEl: B.rEl,
-    lHip: B.lHip, lKnee: B.lKnee, lAnk: B.lAnk,
-    rHip: B.rHip, rKnee: B.rKnee, rAnk: B.rAnk,
+    root, body, inner, mesh, mixer, actions, bones,
+    w: Object.fromEntries(LOCO.map(n => [n, n === 'Idle_Loop' ? 1 : 0])),
+    phase: Math.random(), shot: null, prev: {}, lean: 0,
+    _q: new THREE.Quaternion(),
   };
+}
+
+export function disposePlayerModel(m) {
+  m.mixer.stopAllAction();
+  m.mesh.material.userData.u.uNumTex.value.dispose();
+  m.mesh.material.dispose();
+}
+
+const AX = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
+// bone axes on this rig: thigh/calf/upperarm/lowerarm/spine X = swing (+ backward for legs, + forward
+// for arms & spine), upperarm Z = raise sideways (+ for left, - for right)
+function rot(m, bone, axis, angle) {
+  if (!angle) return;
+  const b = m.bones[bone];
+  if (!b) return;
+  m._q.setFromAxisAngle(AX[axis], angle);
+  b.quaternion.multiply(m._q);
+}
+function blendPose(m, pose, w) {
+  if (!pose || w <= 0) return;
+  for (const k in pose) { const b = m.bones[k]; if (b) b.quaternion.slerp(pose[k], w); }
 }
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = t => t * t * (3 - 2 * t);
 const bell = t => Math.sin(Math.PI * Math.min(1, Math.max(0, t)));
 
-// a: animation state from the player. Writes joint rotations.
-export function animateModel(m, a, time) {
-  const speed = a.speed;
-  const run = Math.min(1, speed / 8.6);
-  const amp = Math.min(1, speed * 0.55) * (0.38 + 0.62 * run);
-  const ph = a.phase;
-  const s = Math.sin(ph), c = Math.cos(ph);
+// start a one-shot (or looping) clip that takes over the whole body, fading over the locomotion
+function playShot(m, name, { fadeIn = 0.12, speed = 1, from = 0, loop = false } = {}) {
+  const act = m.actions[name];
+  if (!act) return;
+  if (m.shot && m.shot.name !== name) { m.shot.act.setEffectiveWeight(0); m.shot.act.stop(); }
+  const keepW = m.shot && m.shot.name === name ? m.shot.w : 0;
+  act.reset();
+  act.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
+  act.clampWhenFinished = true;
+  act.timeScale = speed;
+  act.time = from * act.getClip().duration;
+  act.play();
+  m.shot = { name, act, w: keepW, fadeIn, loop };
+}
+function stopShot(m) { if (m.shot) m.shot.fadingOut = true; }
 
-  // ---- base locomotion ----
-  let lHip = -s * amp * 0.95, rHip = s * amp * 0.95;
-  let lKnee = 0.08 + (0.35 + 1.25 * run) * amp * Math.max(0, c);
-  let rKnee = 0.08 + (0.35 + 1.25 * run) * amp * Math.max(0, -c);
-  let lHipZ = 0.05 * (1 - amp), rHipZ = -0.05 * (1 - amp);
-  let lSh = s * amp * 0.85, rSh = -s * amp * 0.85;
-  let lShZ = 0.1 + 0.05 * amp, rShZ = -0.1 - 0.05 * amp;
-  let lEl = -(0.25 + 1.05 * amp), rEl = -(0.25 + 1.05 * amp);
-  let spineX = 0.04 + 0.2 * run * amp + Math.sin(time * 2.1 + ph) * 0.008;
-  let spineY = s * 0.14 * amp;
-  let spineZ = 0;
-  let headX = -spineX * 0.55;
-  let bodyY = (Math.abs(c) * 0.06 - 0.025) * amp;
-  let bodyX = 0, bodyZ = 0;
-  let lAnk = 0, rAnk = 0;
+// a: animation state written by the match each frame. dt in seconds.
+export function animateModel(m, a, time, dt) {
+  dt = Math.min(dt || 0.016, 0.05);
+  const P = m.prev;
+  const started = k => a[k] >= 0 && !(P[k] >= 0);
+  const sp = a.speed;
 
-  if (a.ready) {
-    // goalkeeper / defensive crouch
-    lKnee += 0.45; rKnee += 0.45; lHip -= 0.3; rHip -= 0.3;
-    spineX += 0.25; bodyY -= 0.08;
-    lSh -= 0.45; rSh -= 0.45; lShZ += 0.35; rShZ -= 0.35; lEl = -0.7; rEl = -0.7;
-    lHipZ += 0.12; rHipZ -= 0.12;
+  // ---------------- one-shot triggers ----------------
+  if (started('slideT')) playShot(m, 'Slide_Loop', { fadeIn: 0.08, from: 0.05, speed: 1.2 });
+  if (started('throwT')) playShot(m, 'OverhandThrow', { fadeIn: 0.05, from: 0.25, speed: 1.25 });
+  if (started('hitT')) playShot(m, a.hitBig ? 'Hit_Knockback' : 'Hit_Chest', { fadeIn: 0.05, speed: 1.2 });
+  if (started('skillT')) {
+    const clip = { left: 'Dodge_Left', right: 'Dodge_Right', down: a.skillSide > 0 ? 'Turn180_R' : 'Turn180_L', up: 'Jump_Start', tap: a.skillSide > 0 ? 'Dodge_Right' : 'Dodge_Left' }[a.skillType] || 'Dodge_Left';
+    playShot(m, clip, { fadeIn: 0.06, speed: clip.startsWith('Turn') ? 2.2 : clip === 'Jump_Start' ? 1.8 : 1.7, from: clip === 'Jump_Start' ? 0.2 : 0.1 });
   }
-  if (a.hold) {
-    lSh = -0.95; rSh = -0.95; lEl = -1.25; rEl = -1.25; lShZ = 0.05; rShZ = -0.05;
+  const celebrating = a.celebrate > 0.5 && a.celebrateStyle === 1;
+  if (celebrating && !(m.shot && m.shot.celeb)) {
+    const list = ['Celebration', 'Yes', 'Dance_Loop', 'BackFlip'];
+    const name = list[(a.celebClip || 0) % list.length];
+    playShot(m, name, { fadeIn: 0.25, loop: name !== 'BackFlip' });
+    m.shot.celeb = true;
   }
-  if (a.sad > 0) {
-    headX += 0.45 * a.sad; spineX += 0.12 * a.sad;
-    lShZ = lerp(lShZ, 0.3, a.sad); rShZ = lerp(rShZ, -0.3, a.sad);
-    lEl = lerp(lEl, -1.9, a.sad); rEl = lerp(rEl, -1.9, a.sad);
-    lSh = lerp(lSh, 0.35, a.sad); rSh = lerp(rSh, 0.35, a.sad);
+  if (m.shot && m.shot.celeb && !celebrating) stopShot(m);
+  if (a.sad > 0.6 && sp < 0.6 && !(m.shot && m.shot.sad)) { playShot(m, a.sadClip ? 'Idle_No_Loop' : 'Idle_Tired_Loop', { fadeIn: 0.4, loop: true }); m.shot.sad = true; }
+  if (m.shot && m.shot.sad && (a.sad < 0.3 || sp > 0.8)) stopShot(m);
+  if (m.shot && m.shot.name === 'Slide_Loop' && a.slideT < 0) stopShot(m);
+  if (m.shot && !m.shot.loop && !m.shot.fadingOut) {
+    const act = m.shot.act;
+    if (act.time >= act.getClip().duration - 0.12 || !act.isRunning()) stopShot(m);
   }
-  if (a.celebrate > 0) {
-    const k = a.celebrate;
-    if (a.celebrateStyle === 0) { // aeroplane
-      lShZ = lerp(lShZ, 1.45, k); rShZ = lerp(rShZ, -1.45, k); lSh = lerp(lSh, 0, k); rSh = lerp(rSh, 0, k);
-      lEl = lerp(lEl, -0.1, k); rEl = lerp(rEl, -0.1, k); bodyZ = Math.sin(time * 3) * 0.18 * k;
-    } else { // jumping fists
-      const j = Math.abs(Math.sin(time * 6));
-      lSh = lerp(lSh, -2.9, k); rSh = lerp(rSh, -2.9 + Math.sin(time * 6) * 0.3, k);
-      lEl = lerp(lEl, -0.4, k); rEl = lerp(rEl, -0.4, k);
-      bodyY += j * 0.25 * k; lKnee += j * 0.5 * k; rKnee += j * 0.5 * k;
-    }
+  for (const k of ['slideT', 'throwT', 'hitT', 'skillT']) P[k] = a[k];
+
+  // ---------------- one-shot weight ----------------
+  let shotW = 0;
+  if (m.shot) {
+    const s = m.shot;
+    s.w = s.fadingOut ? s.w - dt / 0.18 : Math.min(1, s.w + dt / s.fadeIn);
+    if (s.w <= 0) { s.act.setEffectiveWeight(0); s.act.stop(); m.shot = null; }
+    else { s.act.setEffectiveWeight(s.w); shotW = s.w; }
   }
 
-  // ---- kick ----
+  // ---------------- locomotion blend ----------------
+  const ang = a.moveAngle || 0; // velocity direction relative to facing
+  const fw = Math.cos(ang), sd = Math.sin(ang);
+  const W = { Idle_Loop: 0, Walk_Loop: 0, Jog_Fwd_Loop: 0, Sprint_Loop: 0, Jog_Bwd_Loop: 0, Jog_Left_Loop: 0, Jog_Right_Loop: 0, Crouch_Idle_Loop: 0 };
+  if (sp < 0.25) W.Idle_Loop = 1;
+  else if (sp < 1.6) { const k = (sp - 0.25) / 1.35; W.Idle_Loop = 1 - k; W.Walk_Loop = k; }
+  else if (sp < 4.0) { const k = (sp - 1.6) / 2.4; W.Walk_Loop = 1 - k; W.Jog_Fwd_Loop = k; }
+  else if (sp < 7.0) { const k = (sp - 4.0) / 3.0; W.Jog_Fwd_Loop = 1 - k; W.Sprint_Loop = k; }
+  else W.Sprint_Loop = 1;
+  // jockeying / back-pedalling: redistribute the moving weight by direction
+  if (sp > 0.6 && fw < 0.75) {
+    const mv = 1 - W.Idle_Loop;
+    for (const k of ['Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop']) W[k] *= Math.max(0, fw);
+    W.Jog_Bwd_Loop = mv * Math.max(0, -fw);
+    W.Jog_Left_Loop = mv * Math.max(0, sd) * 0.9;
+    W.Jog_Right_Loop = mv * Math.max(0, -sd) * 0.9;
+  }
+  if (a.ready) { W.Crouch_Idle_Loop = 0.45 * W.Idle_Loop; W.Idle_Loop *= 0.55; }
+  // smooth weights so transitions never pop
+  const kw = 1 - Math.exp(-dt * 10);
+  let stride = 0, sum = 0;
+  for (const n of LOCO) {
+    m.w[n] += (W[n] - m.w[n]) * kw;
+    if (STRIDE[n]) { stride += STRIDE[n] * m.w[n]; sum += m.w[n]; }
+  }
+  // one shared gait phase keeps every blended clip on the same foot
+  if (sum > 0.05 && sp > 0.1) m.phase = (m.phase + dt * sp / (stride / sum)) % 1;
+  for (const n of LOCO) {
+    const act = m.actions[n];
+    act.setEffectiveWeight(m.w[n] * (1 - shotW));
+    if (STRIDE[n]) { act.timeScale = 0; act.time = m.phase * act.getClip().duration; }
+  }
+  m.mixer.update(dt);
+
+  // ---------------- procedural layers on top of the mocap ----------------
+  const body = m.body;
+  body.position.set(0, 0, 0);
+  body.rotation.set(0, 0, 0);
+  // lean into turns
+  m.lean += ((a.turnRate || 0) * Math.min(1, sp / 7) * 0.09 - m.lean) * Math.min(1, dt * 8);
+  body.rotation.z = -Math.max(-0.28, Math.min(0.28, m.lean));
+
   if (a.kickT >= 0) {
     const t = a.kickT, p = a.kickPow;
-    let h, k;
-    if (t < 0.38) { const w = ease(t / 0.38); h = lerp(0, 0.75 + 0.3 * p, w); k = lerp(0.1, 1.5, w); }
-    else if (t < 0.58) { const w = ease((t - 0.38) / 0.2); h = lerp(0.75 + 0.3 * p, -0.85 - 0.55 * p, w); k = lerp(1.5, 0.05, w); }
-    else { const w = ease((t - 0.58) / 0.42); h = lerp(-0.85 - 0.55 * p, 0, w); k = lerp(0.05, 0.12, w); }
+    let h, kn;
+    if (t < 0.38) { const w = ease(t / 0.38); h = lerp(0, 0.75 + 0.35 * p, w); kn = lerp(0.1, 1.5, w); }
+    else if (t < 0.58) { const w = ease((t - 0.38) / 0.2); h = lerp(0.75 + 0.35 * p, -0.9 - 0.6 * p, w); kn = lerp(1.5, 0.05, w); }
+    else { const w = ease((t - 0.58) / 0.42); h = lerp(-0.9 - 0.6 * p, 0, w); kn = lerp(0.05, 0.1, w); }
     const b = bell(t);
-    rHip = h; rKnee = k; lHip = -0.18 * b; lKnee = 0.25 * b;
-    lShZ = 0.1 + 0.75 * b; rShZ = -0.1 - 0.45 * b; lSh = -0.35 * b; rSh = 0.3 * b; lEl = -0.4; rEl = -0.5;
-    spineX = 0.05 - 0.12 * b * p; spineY = -0.25 * b;
-    bodyY = -0.03 * b; rAnk = 0.4 * b;
+    const fade = Math.min(1, t * 6, (1 - t) * 4);
+    // take the kicking leg out of the run cycle, then swing it through the ball
+    blendPose(m, A.restLeg || (A.restLeg = restPose(/^(thigh_r|calf_r|foot_r)$/)), 0.85 * fade);
+    rot(m, 'thigh_r', 'x', h * fade);
+    rot(m, 'calf_r', 'x', kn * fade);
+    rot(m, 'foot_r', 'x', -0.3 * b);
+    rot(m, 'thigh_l', 'x', -0.15 * b);
+    rot(m, 'calf_l', 'x', 0.35 * b);
+    rot(m, 'upperarm_l', 'z', 0.75 * b);
+    rot(m, 'upperarm_r', 'z', -0.45 * b);
+    rot(m, 'spine_02', 'x', -0.12 * b * p);
+    rot(m, 'spine_02', 'y', -0.25 * b);
+    body.position.y -= 0.03 * b;
   }
-  // ---- header jump ----
-  if (a.headerT >= 0) {
-    const b = bell(a.headerT);
-    bodyY += 0.45 * b; lKnee += 0.8 * b; rKnee += 0.6 * b; lHip -= 0.3 * b;
-    lSh = -0.5 * b; rSh = -0.5 * b; lShZ = 0.8 * b; rShZ = -0.8 * b;
-    spineX = -0.25 * b + 0.5 * Math.max(0, a.headerT - 0.4); headX = 0.3 * b;
-  }
-  // ---- standing tackle ----
   if (a.tackleT >= 0) {
     const b = bell(a.tackleT);
-    rHip = lerp(rHip, -1.05, b); rKnee = lerp(rKnee, 0.1, b); lKnee = lerp(lKnee, 0.75, b); lHip = lerp(lHip, 0.25, b);
-    bodyY -= 0.16 * b; spineX = lerp(spineX, 0.35, b); lShZ = 0.6 * b + 0.1; rShZ = -0.4 * b - 0.1;
+    rot(m, 'thigh_r', 'x', -1.0 * b);
+    rot(m, 'calf_r', 'x', -0.3 * b);
+    rot(m, 'calf_l', 'x', 0.8 * b);
+    rot(m, 'spine_02', 'x', 0.35 * b);
+    rot(m, 'upperarm_l', 'z', 0.6 * b);
+    body.position.y -= 0.18 * b;
   }
-  // ---- slide tackle ----
-  if (a.slideT >= 0) {
-    const t = a.slideT;
-    const w = t < 0.15 ? ease(t / 0.15) : t > 0.8 ? ease((1 - t) / 0.2) : 1;
-    bodyY = lerp(bodyY, -0.66, w); spineX = lerp(spineX, -0.85, w);
-    rHip = lerp(rHip, -1.45, w); rKnee = lerp(rKnee, 0.05, w);
-    lHip = lerp(lHip, -1.1, w); lKnee = lerp(lKnee, 1.4, w);
-    lSh = lerp(lSh, 0.9, w); lShZ = lerp(lShZ, 0.5, w); lEl = lerp(lEl, -0.1, w);
-    rSh = lerp(rSh, -0.6, w); rShZ = lerp(rShZ, -0.8, w);
-    headX = lerp(headX, 0.6, w);
+  if (a.headerT >= 0) {
+    const b = bell(a.headerT);
+    body.position.y += 0.5 * b;
+    rot(m, 'thigh_l', 'x', -0.6 * b); rot(m, 'calf_l', 'x', 1.2 * b);
+    rot(m, 'thigh_r', 'x', -0.2 * b); rot(m, 'calf_r', 'x', 0.9 * b);
+    rot(m, 'upperarm_l', 'z', 0.9 * b); rot(m, 'upperarm_r', 'z', -0.9 * b);
+    const nod = a.headerT < 0.45 ? -0.35 * ease(a.headerT / 0.45) : lerp(-0.35, 0.55, ease((a.headerT - 0.45) / 0.3));
+    rot(m, 'spine_03', 'x', nod * b);
+    rot(m, 'neck_01', 'x', nod * 0.8 * b);
   }
-  // ---- goalkeeper dive ----
   if (a.diveT >= 0) {
     const t = a.diveT;
-    const w = t < 0.25 ? ease(t / 0.25) : t > 0.85 ? 1 : 1;
-    const side = a.diveSide; // +1 = to model's left (+x)
+    const w = t < 0.22 ? ease(t / 0.22) : 1;
+    const side = a.diveSide;
     if (a.diveHigh) {
-      bodyY += 0.55 * bell(Math.min(1, t * 1.6));
-      lSh = -3.0 * w; rSh = -3.0 * w; lEl = -0.1; rEl = -0.1; lShZ = 0.1; rShZ = -0.1;
-      bodyZ = -side * 0.35 * w;
+      body.position.y += 0.6 * bell(Math.min(1, t * 1.6));
+      body.rotation.z += -side * 0.3 * w;
     } else {
-      bodyZ = -side * 1.35 * w;
-      bodyY += (t < 0.5 ? Math.sin(t / 0.5 * Math.PI * 0.5) * 0.35 : 0.35 * (1 - (t - 0.5) * 1.6)) * w;
-      lSh = -3.0 * w; rSh = -3.0 * w; lEl = -0.1 * w; rEl = -0.1 * w;
-      lShZ = side > 0 ? 0.3 * w : 0.1; rShZ = side < 0 ? -0.3 * w : -0.1;
-      lHip = -0.2 * w; rHip = 0.1 * w; lKnee = 0.3 * w; rKnee = 0.5 * w;
-      spineY = 0;
+      body.rotation.z += -side * 1.3 * w;
+      body.position.y += (t < 0.5 ? Math.sin(t / 0.5 * Math.PI * 0.5) * 0.4 : 0.4 * (1 - (t - 0.5) * 1.7)) * w;
+      body.position.x += side * 0.25 * w;
     }
+    rot(m, 'upperarm_l', 'z', 2.5 * w); rot(m, 'upperarm_r', 'z', -2.5 * w);
+    rot(m, 'lowerarm_l', 'x', -0.3 * w); rot(m, 'lowerarm_r', 'x', -0.3 * w);
+    rot(m, 'thigh_l', 'x', -0.3 * w); rot(m, 'calf_l', 'x', 0.5 * w); rot(m, 'calf_r', 'x', 0.7 * w);
   }
-  // ---- throw-in ----
-  if (a.throwT >= 0) {
-    const t = a.throwT;
-    const arm = t < 0.5 ? lerp(-2.6, -3.4, ease(t / 0.5)) : lerp(-3.4, -1.4, ease((t - 0.5) / 0.5));
-    lSh = arm; rSh = arm; lEl = t < 0.5 ? -1.2 : -0.2; rEl = lEl; lShZ = 0.15; rShZ = -0.15;
-    spineX = t < 0.5 ? -0.25 : 0.2;
-  } else if (a.throwReady) {
-    lSh = -2.7; rSh = -2.7; lEl = -1.3; rEl = -1.3; lShZ = 0.15; rShZ = -0.15; spineX = -0.1;
+  if (a.hold) blendPose(m, A.poses.hold, 0.9);
+  if (a.throwReady) blendPose(m, A.poses.throw, 0.9);
+  if (a.celebrate > 0 && a.celebrateStyle === 0) {
+    // aeroplane run
+    rot(m, 'upperarm_l', 'z', 1.25 * a.celebrate); rot(m, 'upperarm_r', 'z', -1.25 * a.celebrate);
+    body.rotation.z += Math.sin(time * 3) * 0.16 * a.celebrate;
   }
-
-  m.lHip.rotation.set(lHip, 0, lHipZ);
-  m.rHip.rotation.set(rHip, 0, rHipZ);
-  m.lKnee.rotation.x = lKnee;
-  m.rKnee.rotation.x = rKnee;
-  m.lAnk.rotation.x = lAnk - 0.1 * lKnee;
-  m.rAnk.rotation.x = rAnk - 0.1 * rKnee;
-  m.lSh.rotation.set(lSh, 0, lShZ);
-  m.rSh.rotation.set(rSh, 0, rShZ);
-  m.lEl.rotation.x = lEl;
-  m.rEl.rotation.x = rEl;
-  m.spine.rotation.set(spineX, spineY, spineZ);
-  m.head.rotation.x = headX;
-  m.body.position.y = bodyY;
-  m.body.rotation.set(bodyX, 0, bodyZ);
+  if (a.sad > 0 && sp > 0.4) { rot(m, 'neck_01', 'x', 0.4 * a.sad); rot(m, 'spine_03', 'x', 0.15 * a.sad); }
 }
