@@ -21,14 +21,17 @@ const settings = {
   graphics: store.get('graphics', weakDevice ? 'low' : 'high'),
   autoSprint: true,
   sound: store.get('sound', true),
+  assist: store.get('assist', 'on'),
 };
+const applyAssist = () => { settings.passAssist = settings.autoSwitch = settings.assist !== 'off'; };
+applyAssist();
 
 // ---------------------------------------------------------------- renderer
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.08;
+renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
@@ -44,7 +47,7 @@ function applyGraphics() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, high ? 2 : 1.3));
   renderer.shadowMap.enabled = high;
   if (stadium) scene.remove(stadium.root);
-  stadium = buildStadium(scene, settings.graphics);
+  stadium = buildStadium(scene, settings.graphics, renderer);
   resize();
 }
 
@@ -98,6 +101,8 @@ const hooks = {
     eventTimer = setTimeout(() => ui.event.classList.remove('show'), 1300);
   },
   goal(team, name, own) {
+    const c = match.scorer ? match.scorer.pos : match.ball.pos;
+    if (stadium) stadium.confetti(c.x, c.z, team.isUser ? ['#1d5cff', '#ffffff', '#ffd21f', '#4f86ff'] : ['#e0202a', '#ffd23f', '#8e0a12']);
     hooks.banner('GOAL!', `${name}  ${match.home.score} - ${match.away.score}`, 4200, team.isUser ? 'home' : 'away');
     if (navigator.vibrate) try { navigator.vibrate(team.isUser ? [60, 40, 120] : 40); } catch (_) { /* ignore */ }
   },
@@ -221,6 +226,7 @@ document.querySelectorAll('.opt').forEach(o => {
     store.set(k, settings[k]);
     syncOptions();
     if (k === 'graphics') { applyGraphics(); newMatch(); }
+    if (k === 'assist') applyAssist();
   }));
 });
 syncOptions();
@@ -398,7 +404,10 @@ function frame(now) {
     if (introT > 3.4) beginKickoff();
   }
   if (match && state !== 'paused') match.update(dt, input);
-  if (stadium) stadium.update(dt, match ? match.excite : 0, state === 'game' ? camTarget : focusDefault);
+  if (stadium) {
+    if (match && match.netBulge && !match.netBulge.done) { match.netBulge.done = true; stadium.netHit(match.netBulge.s); }
+    stadium.update(dt, match ? match.excite : 0, state === 'game' ? camTarget : focusDefault);
+  }
   sound.update(match && state === 'game' ? match.excite : 0);
   updateCamera(dt);
   updateHUD();
@@ -412,4 +421,4 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 // debug handle for automated testing
-window.__sb27 = { get match() { return match; }, get state() { return state; }, startGame, input, camera, renderer, skipIntro() { introT = 99; } };
+window.__sb27 = { get match() { return match; }, get state() { return state; }, startGame, input, camera, renderer, get stadium() { return stadium; }, skipIntro() { introT = 99; } };

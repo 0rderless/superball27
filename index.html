@@ -20,6 +20,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
+  <div id="vignette"></div>
   <div id="fade"></div>
 
   <!-- MAIN MENU -->
@@ -53,9 +54,15 @@
           <label>Camera</label>
           <div class="chips"><button data-v="close">Close</button><button data-v="broadcast">Broadcast</button><button data-v="wide">Wide</button></div>
         </div>
-        <div class="opt" data-opt="graphics">
-          <label>Graphics</label>
-          <div class="chips"><button data-v="low">Smooth</button><button data-v="high">HD</button></div>
+        <div class="opt-pair">
+          <div class="opt" data-opt="assist">
+            <label>Assists</label>
+            <div class="chips"><button data-v="on">On</button><button data-v="off">Off</button></div>
+          </div>
+          <div class="opt" data-opt="graphics">
+            <label>Graphics</label>
+            <div class="chips"><button data-v="low">Smooth</button><button data-v="high">HD</button></div>
+          </div>
         </div>
       </div>
     </div>

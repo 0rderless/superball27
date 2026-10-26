@@ -10,40 +10,88 @@ function canvas(w, h) {
 }
 
 function grassTexture() {
-  // covers 126m x 88m; mown stripes aligned to the pitch
+  // covers 126m x 88m; mown stripes aligned to the pitch with a faint cross-cut and blade detail
   const W = 2048, H = 1024, mW = 126, mH = 88;
   const [c, g] = canvas(W, H);
   const pxm = W / mW;
   const x0 = (mW / 2 - HL) * pxm;
-  g.fillStyle = '#2f7d32';
+  g.fillStyle = '#2c7a30';
   g.fillRect(0, 0, W, H);
   const stripe = 105 / 18;
   for (let i = -3; i < 22; i++) {
-    g.fillStyle = i % 2 ? '#3a8f3c' : '#2e7a31';
+    g.fillStyle = i % 2 ? '#3d9441' : '#2a7330';
     g.fillRect(x0 + i * stripe * pxm, 0, stripe * pxm + 1, H);
   }
-  // fine noise
+  // cross-cut: subtle bands across the width
+  const z0 = (mH / 2 - HW) * pxm, band = 68 / 10;
+  for (let j = 0; j < 10; j += 2) {
+    g.fillStyle = 'rgba(255,255,255,0.035)';
+    g.fillRect(0, z0 + j * band * pxm, W, band * pxm);
+  }
+  // blade detail: short streaks + noise
   const img = g.getImageData(0, 0, W, H);
   const d = img.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const n = (Math.random() - 0.5) * 22;
-    d[i] += n * 0.6; d[i + 1] += n; d[i + 2] += n * 0.4;
+  for (let y = 0; y < H; y++) {
+    let streak = 0;
+    for (let x = 0; x < W; x++) {
+      if (Math.random() < 0.08) streak = (Math.random() - 0.5) * 30;
+      streak *= 0.85;
+      const i = (y * W + x) * 4;
+      const n = (Math.random() - 0.5) * 16 + streak;
+      d[i] += n * 0.5; d[i + 1] += n; d[i + 2] += n * 0.35;
+    }
   }
   g.putImageData(img, 0, 0);
-  // light wear patches in the goalmouths and centre
-  const wear = (x, z, r) => {
+  // floodlit pools of light and darker, worn goalmouths
+  const pool = (x, z, r, col) => {
     const cx = (x + mW / 2) * pxm, cy = (z + mH / 2) * pxm;
     const grd = g.createRadialGradient(cx, cy, 0, cx, cy, r * pxm);
-    grd.addColorStop(0, 'rgba(120,110,60,0.22)');
-    grd.addColorStop(1, 'rgba(120,110,60,0)');
+    grd.addColorStop(0, col);
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grd;
     g.fillRect(cx - r * pxm, cy - r * pxm, r * 2 * pxm, r * 2 * pxm);
   };
-  wear(HL - 3, 0, 5); wear(-HL + 3, 0, 5); wear(0, 0, 4);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) pool(sx * 30, sz * 18, 32, 'rgba(255,255,220,0.07)');
+  pool(HL - 3, 0, 5, 'rgba(110,100,55,0.25)'); pool(-HL + 3, 0, 5, 'rgba(110,100,55,0.25)'); pool(0, 0, 4, 'rgba(110,100,55,0.15)');
+  // darker edges outside the touchlines
+  g.fillStyle = 'rgba(0,20,0,0.18)';
+  g.fillRect(0, 0, W, z0 - 2); g.fillRect(0, H - z0 + 2, W, z0);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
   return t;
+}
+
+function glowTexture() {
+  const [c, g] = canvas(64, 64);
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.25, 'rgba(255,255,255,0.7)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+
+// Image-based lighting: a blurred copy of the night sky + floodlight panels so kits and the ball get soft reflections.
+function buildEnvironment(renderer, skyMap) {
+  const env = new THREE.Scene();
+  env.add(new THREE.Mesh(new THREE.SphereGeometry(50, 24, 12), new THREE.MeshBasicMaterial({ map: skyMap, side: THREE.BackSide })));
+  const panelMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(6, 5.6, 5) });
+  for (const sx of [1, -1]) for (const sz of [1, -1]) {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(14, 6), panelMat);
+    p.position.set(sx * 30, 28, sz * 24);
+    p.lookAt(0, 0, 0);
+    env.add(p);
+  }
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(48, 24), new THREE.MeshBasicMaterial({ color: 0x1f5a24 }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -2;
+  env.add(ground);
+  const pm = new THREE.PMREMGenerator(renderer);
+  const tex = pm.fromScene(env, 0.04).texture;
+  pm.dispose();
+  return tex;
 }
 
 function netTexture() {
@@ -184,26 +232,32 @@ function bowl(path, inner, outer, y0, y1, tex, repeatLen) {
   return new THREE.Mesh(geo, tex);
 }
 
-export function buildStadium(scene, quality) {
+export function buildStadium(scene, quality, renderer) {
   const root = new THREE.Group();
   scene.add(root);
   const high = quality === 'high';
 
   // ---- sky ----
+  const skyMap = skyTexture();
   const sky = new THREE.Mesh(
     new THREE.SphereGeometry(600, 24, 16),
-    new THREE.MeshBasicMaterial({ map: skyTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
+    new THREE.MeshBasicMaterial({ map: skyMap, side: THREE.BackSide, fog: false, depthWrite: false })
   );
   root.add(sky);
+  if (renderer) {
+    if (scene.environment) scene.environment.dispose();
+    scene.environment = buildEnvironment(renderer, skyMap);
+    scene.environmentIntensity = 0.55;
+  }
 
   // ---- lights ----
-  const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x26401f, 1.15);
+  const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x26401f, 0.85);
   root.add(hemi);
-  const sun = new THREE.DirectionalLight(0xfff4e0, 2.4);
+  const sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
   sun.position.set(-30, 60, 40);
   root.add(sun);
   root.add(sun.target);
-  const fill = new THREE.DirectionalLight(0xbcd0ff, 0.9);
+  const fill = new THREE.DirectionalLight(0xc4d6ff, 1.25);
   fill.position.set(40, 45, -50);
   root.add(fill);
   if (high) {
@@ -218,7 +272,7 @@ export function buildStadium(scene, quality) {
   // ---- ground / grass ----
   const grass = new THREE.Mesh(
     new THREE.PlaneGeometry(126, 88),
-    new THREE.MeshLambertMaterial({ map: grassTexture() })
+    new THREE.MeshStandardMaterial({ map: grassTexture(), roughness: 0.93, metalness: 0 })
   );
   grass.rotation.x = -Math.PI / 2;
   grass.receiveShadow = true;
@@ -421,11 +475,92 @@ export function buildStadium(scene, quality) {
 
   scene.fog = new THREE.Fog(0x0a1230, 170, 520);
 
+  // ---- camera flashes in the crowd ----
+  const FN = 420;
+  const fpos = new Float32Array(FN * 3), fcol = new Float32Array(FN * 3), flife = new Float32Array(FN);
+  for (let i = 0; i < FN; i++) {
+    const pt = path[(Math.random() * path.length) | 0];
+    const upper = Math.random() < 0.4;
+    const k = Math.random();
+    const off = upper ? 30 + k * 22 : 4 + k * 22;
+    const y = upper ? 19 + k * 19 : 1.2 + k * 13.8;
+    fpos[i * 3] = pt[0] + pt[2] * off; fpos[i * 3 + 1] = y + 0.6; fpos[i * 3 + 2] = pt[1] + pt[3] * off;
+  }
+  const fgeo = new THREE.BufferGeometry();
+  fgeo.setAttribute('position', new THREE.BufferAttribute(fpos, 3));
+  fgeo.setAttribute('color', new THREE.BufferAttribute(fcol, 3));
+  const glowMap = glowTexture();
+  const flashes = new THREE.Points(fgeo, new THREE.PointsMaterial({ size: 1.6, map: glowMap, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  flashes.frustumCulled = false;
+  root.add(flashes);
+
+  // ---- confetti for goals ----
+  const CN = high ? 700 : 350;
+  const cpos = new Float32Array(CN * 3), ccol = new Float32Array(CN * 3), cvel = new Float32Array(CN * 3);
+  const cgeo = new THREE.BufferGeometry();
+  cgeo.setAttribute('position', new THREE.BufferAttribute(cpos, 3));
+  cgeo.setAttribute('color', new THREE.BufferAttribute(ccol, 3));
+  const confetti = new THREE.Points(cgeo, new THREE.PointsMaterial({ size: 0.55, vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false }));
+  confetti.frustumCulled = false;
+  confetti.visible = false;
+  root.add(confetti);
+  let confT = 0;
+
+  const ripple = [0, 0];
+  const backX = goals.map(g => g.back.position.x);
+
   let t0 = 0;
   return {
     root, sun, goals,
+    netHit(s) { ripple[s > 0 ? 0 : 1] = 0.001; },
+    confetti(x, z, colors) {
+      const cols = colors.map(h => new THREE.Color(h));
+      for (let i = 0; i < CN; i++) {
+        cpos[i * 3] = x + (Math.random() - 0.5) * 26;
+        cpos[i * 3 + 1] = 4 + Math.random() * 12;
+        cpos[i * 3 + 2] = z + (Math.random() - 0.5) * 20;
+        cvel[i * 3] = (Math.random() - 0.5) * 2; cvel[i * 3 + 1] = -1.5 - Math.random() * 1.5; cvel[i * 3 + 2] = (Math.random() - 0.5) * 2;
+        const cc = cols[(Math.random() * cols.length) | 0];
+        ccol[i * 3] = cc.r; ccol[i * 3 + 1] = cc.g; ccol[i * 3 + 2] = cc.b;
+      }
+      cgeo.attributes.color.needsUpdate = true;
+      confetti.visible = true;
+      confT = 7;
+    },
     update(dt, excitement, focus) {
       t0 += dt;
+      // flashes: random sparkle, more when the game is exciting
+      const rate = 0.0025 + excitement * 0.02;
+      for (let i = 0; i < FN; i++) {
+        if (flife[i] > 0) flife[i] -= dt * 9;
+        else if (Math.random() < rate) flife[i] = 1;
+        const f = Math.max(0, flife[i]);
+        fcol[i * 3] = fcol[i * 3 + 1] = fcol[i * 3 + 2] = f;
+      }
+      fgeo.attributes.color.needsUpdate = true;
+      // confetti drifts down with a flutter
+      if (confT > 0) {
+        confT -= dt;
+        for (let i = 0; i < CN; i++) {
+          cpos[i * 3] += (cvel[i * 3] + Math.sin(t0 * 3 + i) * 0.8) * dt;
+          cpos[i * 3 + 1] = Math.max(0.05, cpos[i * 3 + 1] + cvel[i * 3 + 1] * dt);
+          cpos[i * 3 + 2] += (cvel[i * 3 + 2] + Math.cos(t0 * 2.7 + i) * 0.8) * dt;
+        }
+        cgeo.attributes.position.needsUpdate = true;
+        confetti.material.opacity = Math.min(0.95, confT);
+        if (confT <= 0) confetti.visible = false;
+      }
+      // net ripple after a goal
+      for (let k = 0; k < 2; k++) {
+        if (ripple[k] > 0) {
+          ripple[k] += dt;
+          const s = k === 0 ? 1 : -1;
+          const amp = Math.sin(ripple[k] * 22) * Math.exp(-ripple[k] * 3.5) * 0.45 + Math.exp(-ripple[k] * 2) * 0.25;
+          goals[k].back.position.x = backX[k] + s * amp;
+          goals[k].back.scale.set(1, 1 + amp * 0.1, 1 + amp * 0.12);
+          if (ripple[k] > 2) { ripple[k] = 0; goals[k].back.position.x = backX[k]; goals[k].back.scale.set(1, 1, 1); }
+        }
+      }
       adTex.offset.x = (adTex.offset.x + dt * 0.03) % 1;
       // crowd bounce
       const j = excitement > 0.5 ? Math.abs(Math.sin(t0 * 9)) * 0.004 * excitement : Math.sin(t0 * 2) * 0.0005;

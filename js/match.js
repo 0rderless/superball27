@@ -392,6 +392,7 @@ export class Match {
     const free = !ball.owner && this.phase === 'play';
     const nearFree = free && p.cool <= 0 && hdist(p.pos, ball.pos) < 1.6 && ball.pos.y < 1.3;
     const aim = mag > 0.2 ? wdir : p.fwd.clone();
+    this._userAim = aim;
 
     if (hasBall || nearFree) {
       if (B.pass.pressed || B.through.pressed) {
@@ -442,13 +443,14 @@ export class Match {
         q.manual = true;
         q.idleT = 0;
       }
-      // auto switch when the controlled man is idle and far from play
-      if (q.idleT > 0.6 && !B.through.down) {
-        this._autoSw = (this._autoSw || 0) + dt;
-        if (this._autoSw > 0.5) {
-          this._autoSw = 0;
-          const best = this.bestDefender(team, null);
-          if (best && best !== q && hdist(best.pos, this.pred[3]) + 6 < hdist(q.pos, this.pred[3])) this.setControlled(best);
+      // auto switch to whoever is closest to the ball (eager when you're not steering)
+      this._swCD = (this._swCD || 0) - dt;
+      if (this.settings.autoSwitch !== false && !B.through.down && this._swCD <= 0 && q.busy <= 0) {
+        const best = this.bestDefender(team, null);
+        if (best && best !== q) {
+          const tgt = ball.owner ? ball.owner.pos : this.pred[3];
+          const margin = q.idleT > 0.25 ? 1.5 : 4.5;
+          if (hdist(best.pos, tgt) + margin < hdist(q.pos, tgt)) { this.setControlled(best); this._swCD = 0.6; }
         }
       }
     } else team.callPress = false;
@@ -480,6 +482,7 @@ export class Match {
     const t = this.home;
     const best = this.bestDefender(t, manual ? t.controlled : null);
     if (best) this.setControlled(best);
+    this._swCD = 1.0; // don't immediately undo a manual switch
   }
 
   // ---------------------------------------------------------------- actions
@@ -525,22 +528,43 @@ export class Match {
     return { p: best, d: bd };
   }
 
-  pass(p, aim, type, firstTime = false) {
+  // Pass assist: pick the teammate the player most likely means, favouring open,
+  // unblocked options inside a generous cone around the aim direction.
+  passTarget(p, aim, type) {
     const team = p.team;
+    const assist = team.isUser && this.settings.passAssist !== false;
+    const cone = assist ? (type === 'through' ? 1.5 : 1.35) : (type === 'through' ? 1.15 : 1.0);
     let best = null, bestScore = 1e9;
     for (const m of team.players) {
       if (m === p) continue;
       const dx = m.pos.x - p.pos.x, dz = m.pos.z - p.pos.z;
       const d = Math.hypot(dx, dz);
       if (d < 3 || d > 62) continue;
-      const cos = (dx * aim.x + dz * aim.z) / d;
-      const ang = Math.acos(clamp(cos, -1, 1));
-      if (ang > (type === 'through' ? 1.15 : 1.0)) continue;
-      let sc = ang * 2.2 + d * 0.02 + this.laneRisk(p.pos, m.pos, team.opp) * 0.5;
+      const ang = Math.acos(clamp((dx * aim.x + dz * aim.z) / d, -1, 1));
+      if (ang > cone) continue;
+      let sc;
+      if (assist) {
+        const open = clamp(this.nearestOpp(m).d / 6, 0, 1);
+        sc = ang * 1.5 + d * 0.016 + this.laneRisk(p.pos, m.pos, team.opp) * 1.1 - open * 0.45;
+        if (type === 'through' && FORWARDS.has(m.role)) sc -= 0.3;
+      } else sc = ang * 2.2 + d * 0.02 + this.laneRisk(p.pos, m.pos, team.opp) * 0.5;
       if (m.isGK) sc += 1.5;
       if (sc < bestScore) { bestScore = sc; best = m; }
     }
-    this.passTo(p, best, aim, type, firstTime);
+    if (!best && assist) {
+      // nobody in the cone: give it to the nearest teammate rather than into touch
+      let bd = 1e9;
+      for (const m of team.players) {
+        if (m === p || m.isGK) continue;
+        const d = hdist(m.pos, p.pos);
+        if (d > 3 && d < bd) { bd = d; best = m; }
+      }
+    }
+    return best;
+  }
+
+  pass(p, aim, type, firstTime = false) {
+    this.passTo(p, this.passTarget(p, aim, type), aim, type, firstTime);
   }
 
   passTo(p, m, aim, type, firstTime = false) {
@@ -559,9 +583,10 @@ export class Match {
         if (d > 30 || this.laneRisk(from, target, team.opp) > 0.65) { mode = 'loft'; angle = 0.55; }
       } else {
         const t = d / 17;
-        target = m.pos.clone().addScaledVector(m.vel, t * 0.7);
+        const assist = team.isUser && this.settings.passAssist !== false;
+        target = m.pos.clone().addScaledVector(m.vel, t * (assist ? 0.95 : 0.7));
         if (type === 'long' || d > 34) { mode = 'loft'; angle = d > 45 ? 0.6 : 0.68; }
-        else if (d > 12 && this.laneRisk(from, target, team.opp) > 0.7) { mode = 'loft'; angle = 0.5; }
+        else if (d > 12 && this.laneRisk(from, target, team.opp) > (assist ? 0.55 : 0.7)) { mode = 'loft'; angle = 0.5; }
       }
     }
     target.x = clamp(target.x, -HL + 0.8, HL - 0.8);
@@ -570,10 +595,12 @@ export class Match {
       m.recv = { point: target.clone(), t: 0 };
       if (type === 'through') m.runT = 0;
     }
-    const err = (team.isUser ? (1.05 - p.st.pas) * 0.07 : this.diff.passErr * (1.25 - p.st.pas) * 1.4) * gauss();
+    const assisted = team.isUser && this.settings.passAssist !== false;
+    const err = (team.isUser ? (1.05 - p.st.pas) * (assisted ? 0.015 : 0.07) : this.diff.passErr * (1.25 - p.st.pas) * 1.4) * gauss();
     const d = hdist(from, target);
     const power = mode === 'loft' ? 0.65 : clamp(0.25 + d / 60, 0.25, 0.8);
-    this.kick(p, { mode, target, angle, err, speedMul: type === 'through' ? 1.06 : 1, power, kind: 'pass', recv: m, first: firstTime });
+    const speedMul = (type === 'through' ? 1.06 : 1) * (assisted && mode === 'ground' ? 1.08 : 1);
+    this.kick(p, { mode, target, angle, err, speedMul, power, kind: 'pass', recv: m, first: firstTime });
     this.stats[team.key].passes++;
     if (team.isUser && m && !m.isGK) {
       this.setControlled(m);
@@ -1795,11 +1822,25 @@ export class Match {
       const hasBall = this.ball.owner === c;
       this.ring.material.color.setHex(hasBall ? 0x45e0ff : 0xffffff);
     }
-    // receiver highlight
+    // receiver highlight, or a live preview of who the pass will go to
     let rcv = null;
     for (const p of this.home.players) if (p.recv && p !== c) rcv = p;
+    let preview = false;
+    if (!rcv && c && this.ball.owner === c && this.phase === 'play' && this._userAim) {
+      this._prevT = (this._prevT || 0) - dt;
+      if (this._prevT <= 0) { this._prevT = 0.12; this._preview = this.passTarget(c, this._userAim, 'ground'); }
+      rcv = this._preview;
+      preview = true;
+    }
     this.recvRing.visible = !!rcv;
-    if (rcv) this.recvRing.position.set(rcv.pos.x, 0.03, rcv.pos.z);
+    if (rcv) {
+      this.recvRing.position.set(rcv.pos.x, 0.03, rcv.pos.z);
+      const k = preview ? 0.9 + Math.sin(this.time * 8) * 0.1 : 1.1;
+      this.recvRing.scale.set(k, k, k);
+      this.recvRing.material.opacity = preview ? 0.6 : 0.9;
+    }
+    // ball trail on hard-hit balls
+    this.updateTrail(dt);
     // set-piece aim arrow
     const r = this.restart;
     this.aimArrow.visible = !!(r && r.ready && r.team.isUser && this.phase === 'restart');
@@ -1807,6 +1848,36 @@ export class Match {
       this.aimArrow.position.set(r.spot.x, 0.05, r.spot.z);
       this.aimArrow.rotation.y = Math.atan2(r.aim.x, r.aim.z);
     }
+  }
+
+  updateTrail(dt) {
+    if (!this.trail) {
+      const N = 18;
+      this.trailPts = Array.from({ length: N }, () => new V3());
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+      const al = new Float32Array(N * 3);
+      geo.setAttribute('color', new THREE.BufferAttribute(al, 3));
+      this.trail = new THREE.Line(geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      this.trail.frustumCulled = false;
+      this.scene.add(this.trail);
+      this.objects.push(this.trail);
+    }
+    const ball = this.ball;
+    const sp = ball.owner ? 0 : ball.speed;
+    const target = clamp((sp - 14) / 12, 0, 1);
+    this.trailK = (this.trailK || 0) + (target - (this.trailK || 0)) * Math.min(1, dt * 8);
+    const pts = this.trailPts;
+    for (let i = pts.length - 1; i > 0; i--) pts[i].copy(pts[i - 1]);
+    pts[0].set(ball.pos.x, ball.pos.y + 0.05, ball.pos.z);
+    const pa = this.trail.geometry.attributes.position, ca = this.trail.geometry.attributes.color;
+    for (let i = 0; i < pts.length; i++) {
+      pa.setXYZ(i, pts[i].x, pts[i].y, pts[i].z);
+      const f = (1 - i / pts.length) * this.trailK;
+      ca.setXYZ(i, f, f * 0.95, f * 0.7);
+    }
+    pa.needsUpdate = ca.needsUpdate = true;
+    this.trail.visible = this.trailK > 0.02;
   }
 
   // camera focus

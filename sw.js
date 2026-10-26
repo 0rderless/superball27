@@ -1,5 +1,5 @@
 // Offline cache for the home-screen app. Bump VERSION when shipping changes.
-const VERSION = 'sb27-v1';
+const VERSION = 'sb27-v2';
 const ASSETS = [
   './', './index.html', './manifest.json', './css/style.css',
   './js/main.js', './js/match.js', './js/model.js', './js/ball.js', './js/stadium.js', './js/input.js', './js/audio.js', './js/config.js',

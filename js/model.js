@@ -235,7 +235,7 @@ export function createPlayerModel({ kit, skin, hair, style, number, teamTag }) {
   BONE_NAMES.forEach((n, i) => { boneIndex[n] = i; });
   const geo = mergeParts(parts, boneIndex);
   for (const p of parts) p.geo.dispose();
-  const material = new THREE.MeshStandardMaterial({ map: atlasTexture(kit, number, teamTag, skinCol), vertexColors: true, roughness: 0.72 });
+  const material = new THREE.MeshStandardMaterial({ map: atlasTexture(kit, number, teamTag, skinCol), vertexColors: true, roughness: 0.62, envMapIntensity: 0.9 });
   const mesh = new THREE.SkinnedMesh(geo, material);
   mesh.add(B.body);
   mesh.bind(new THREE.Skeleton(BONE_NAMES.map(n => B[n])));
