@@ -368,7 +368,8 @@ export class Match {
     if (p.busy > 0 || p.stun > 0) { p.charging = false; return; }
     const hasBall = ball.owner === p;
 
-    const lockRecv = p.recv && p.recv.t < 0.35;
+    const g = this.guarantee;
+    const lockRecv = p.recv && (p.recv.t < 0.35 || (g && g.to === p && !ball.owner));
     if (mag > 0 && !lockRecv) {
       p.idleT = 0;
       p.manual = true;
@@ -545,7 +546,9 @@ export class Match {
       let sc;
       if (assist) {
         const open = clamp(this.nearestOpp(m).d / 6, 0, 1);
-        sc = ang * 1.5 + d * 0.016 + this.laneRisk(p.pos, m.pos, team.opp) * 1.1 - open * 0.45;
+        // the teammate you point at wins; distance/openness only break near-ties
+        const miss = Math.max(0, ang - Math.atan2(1.6, d)); // how far the aim is off the player's body
+        sc = miss * 3.2 + ang * 0.6 + d * 0.006 + this.laneRisk(p.pos, m.pos, team.opp) * 0.1 - open * 0.06;
         if (type === 'through' && FORWARDS.has(m.role)) sc -= 0.3;
       } else sc = ang * 2.2 + d * 0.02 + this.laneRisk(p.pos, m.pos, team.opp) * 0.5;
       if (m.isGK) sc += 1.5;
@@ -600,7 +603,7 @@ export class Match {
     const d = hdist(from, target);
     const power = mode === 'loft' ? 0.65 : clamp(0.25 + d / 60, 0.25, 0.8);
     const speedMul = (type === 'through' ? 1.06 : 1) * (assisted && mode === 'ground' ? 1.08 : 1);
-    this.kick(p, { mode, target, angle, err, speedMul, power, kind: 'pass', recv: m, first: firstTime });
+    this.kick(p, { mode, target, angle, err, speedMul, power, kind: 'pass', recv: m, first: firstTime, guarantee: assisted && m ? m : null });
     this.stats[team.key].passes++;
     if (team.isUser && m && !m.isGK) {
       this.setControlled(m);
@@ -683,6 +686,7 @@ export class Match {
     this.lastTouch = p;
     this.kickId++;
     this.lastKick = { kind: k.kind, team: p.team, id: this.kickId, by: p };
+    this.guarantee = k.guarantee ? { to: k.guarantee, id: this.kickId, t: 0 } : null;
     this.sound.kick(k.power);
     if (k.kind === 'shot') this.stats[p.team.key].shots++;
   }
@@ -732,7 +736,8 @@ export class Match {
     const foot = p.pos.clone().addScaledVector(p.fwd, slide ? 0.95 : 0.7);
     if (ball.pos.y > 0.8 || hdist(foot, ball.pos) > (slide ? 1.15 : 0.95)) return;
     const o = ball.owner;
-    if (o === p) return;
+    if (o === p || (o && o.pending)) return;
+    if (!o && this.guarantee && this.guarantee.to !== p) return; // assisted pass in flight
     p.tackleDone = true;
     if (o && o.team === p.team) return;
     if (o && ball.held) return;
@@ -904,9 +909,20 @@ export class Match {
     }
 
     const sp = ball.speed;
+    // assisted pass: it always reaches the intended teammate
+    let g = this.guarantee;
+    if (g && (g.id !== this.lastKick.id || g.t > 4.5)) g = this.guarantee = null;
+    if (g) {
+      g.t += dt;
+      const r = g.to;
+      if (hdist(r.pos, ball.pos) < 1.9 && ball.pos.y < 2.7 && r.stun <= 0) { this.guarantee = null; this.gainBall(r, false); return; }
+      if (sp < 0.6 && hdist(r.pos, ball.pos) > 3) g = this.guarantee = null;
+    }
+    const afterHeader = this.lastKick.header;
     let best = null, bd = 1e9, bestType = null;
     for (const p of this.players) {
       if (p.cool > 0 || p.stun > 0) continue;
+      if (g && p !== g.to) continue;
       if (p.action === 'slide' || p.action === 'dive' || p.action === 'header') continue;
       const d = hdist(p.pos, ball.pos);
       if (d > 2.2) continue;
@@ -917,7 +933,8 @@ export class Match {
         continue;
       }
       if (by > 1.2 && by < 2.6 && d < 0.8 && ball.vel.y < 4) {
-        if (d < bd) { bd = d; best = p; bestType = 'header'; }
+        // a ball that was just headed gets chested down instead of headed again (no header ping-pong)
+        if (d < bd) { bd = d; best = p; bestType = afterHeader ? 'control' : 'header'; }
       } else if (by < 1.2 && d < (sp < 5 ? 1.0 : 0.8)) {
         if (sp > 22 && by > 0.3) {
           if (d < 0.55 && d < bd) { bd = d; best = p; bestType = 'block'; }
@@ -984,7 +1001,8 @@ export class Match {
     ball.vel.copy(vel);
     ball.spin = 0;
     this.kickId++;
-    this.lastKick = { kind, team, id: this.kickId, by: p };
+    this.lastKick = { kind, team, id: this.kickId, by: p, header: true };
+    this.guarantee = null;
     this.sound.kick(0.4);
   }
 
@@ -1290,6 +1308,14 @@ export class Match {
     const aB = team.along(bp), cB = team.across(bp);
     let chaser = null;
     if (!owner && this.phase === 'play') chaser = this.bestInterceptor(team).p;
+    const g = this.guarantee;
+    let marker = null;
+    if (g && !owner && g.to.team !== team) {
+      // can't cut out an assisted pass: close down the receiver instead
+      chaser = null;
+      let bd = 1e9;
+      for (const p of team.players) { if (p.isGK) continue; const d = hdist(p.pos, g.to.pos); if (d < bd) { bd = d; marker = p; } }
+    }
     let presser = null, cover = null;
     if (owner && owner.team !== team && this.phase === 'play' && !ball.held) {
       let d1 = 1e9, d2 = 1e9;
@@ -1318,6 +1344,11 @@ export class Match {
           p.goToAuto(ip, true);
           continue;
         }
+      }
+      if (p === marker) {
+        const og = new V3(team.goalX, 0, 0).sub(g.to.pos).setY(0).normalize();
+        p.goTo(tgt.copy(g.to.pos).addScaledVector(og, 1.6), p.maxSpeed(true), 1);
+        continue;
       }
       if (p === chaser) {
         p.goTo(this.interceptPoint(p), p.maxSpeed(true), 0.6);
