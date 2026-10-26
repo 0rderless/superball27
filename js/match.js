@@ -590,6 +590,23 @@ export class Match {
       if (B.shoot.pressed) this.tackle(q, false);
       if (B.skill.pressed) this.tackle(q, true);
       team.callPress = B.through.down;
+      // defence assist: hold SPRINT (no joystick) and your man shadows the ball carrier goal-side
+      q.userJockey = false;
+      const carrier = ball.owner && ball.owner.team !== team ? ball.owner : null;
+      if (this.settings.defAssist !== false && carrier && B.sprint.down && mag < 0.3 && q.busy <= 0 && q.stun <= 0) {
+        const og = new V3(team.goalX - carrier.pos.x, 0, -carrier.pos.z).normalize();
+        const d = hdist(q.pos, carrier.pos);
+        const tgt = carrier.pos.clone().addScaledVector(carrier.vel, 0.3).addScaledVector(og, d > 5 ? 0.8 : 1.6);
+        const vmax = q.maxSpeed(true);
+        q.desired.set(carrier.vel.x + (tgt.x - q.pos.x) * 2.4, 0, carrier.vel.z + (tgt.z - q.pos.z) * 2.4);
+        const dl = Math.hypot(q.desired.x, q.desired.z);
+        if (dl > vmax) q.desired.multiplyScalar(vmax / dl);
+        q.sprint = true;
+        q.manual = true;
+        q.idleT = 0;
+        q.faceTo = carrier.pos;
+        q.userJockey = d < 7;
+      }
       if (B.through.down && mag === 0 && q.busy <= 0) {
         // auto-press the ball
         const tgt = ball.owner ? ball.owner.pos.clone().addScaledVector(ball.owner.vel, 0.25) : this.interceptPoint(q);
@@ -613,7 +630,7 @@ export class Match {
   setControlled(p) {
     const t = this.home;
     if (t.controlled === p || p.isGK) return;
-    if (t.controlled) { t.controlled.manual = false; t.controlled.charging = false; }
+    if (t.controlled) { t.controlled.manual = false; t.controlled.charging = false; t.controlled.userJockey = false; }
     t.controlled = p;
     p.idleT = 9;
     p.manual = false;
@@ -1094,7 +1111,7 @@ export class Match {
         const rx = -o.fwd.z, rz = o.fwd.x;
         const tx = o.pos.x + o.fwd.x * ahead + rx * 0.07;
         const tz = o.pos.z + o.fwd.z * ahead + rz * 0.07;
-        const k = 1 - Math.exp(-dt * (o.pending ? 25 : 16));
+        const k = 1 - Math.exp(-dt * (o.pending ? 25 : o.team.isUser ? 24 : 16));
         const nx = ball.pos.x + (tx - ball.pos.x) * k;
         const nz = ball.pos.z + (tz - ball.pos.z) * k;
         ball.vel.set((nx - ball.pos.x) / dt, 0, (nz - ball.pos.z) / dt);
@@ -2085,7 +2102,15 @@ export class Match {
       const free = p.action !== 'slide' && p.action !== 'dive';
       if (p.stun > 0) p.desired.multiplyScalar(0.25);
       if (free) {
-        const acc = p.busy > 0 ? 4 : ball.owner === p ? 12 : 15;
+        // sharper changes of direction for your player (and dribblers): extra grip the more the
+        // new direction differs from the current run, so cuts and turn-backs are instant
+        const userMan = p.team.isUser && p === p.team.controlled && p.manual;
+        let acc = p.busy > 0 ? 4 : ball.owner === p ? 13 : 15;
+        if (p.busy <= 0 && (userMan || ball.owner === p)) {
+          const v0 = Math.hypot(p.vel.x, p.vel.z), d0 = Math.hypot(p.desired.x, p.desired.z);
+          const cosA = v0 > 0.5 && d0 > 0.5 ? (p.vel.x * p.desired.x + p.vel.z * p.desired.z) / (v0 * d0) : 1;
+          acc = (userMan ? 24 : 15) + (1 - cosA) * (userMan ? 26 : 10);
+        }
         const dx = p.desired.x - p.vel.x, dz = p.desired.z - p.vel.z;
         const dl = Math.hypot(dx, dz);
         const mx = acc * dt;
@@ -2105,7 +2130,7 @@ export class Match {
       const sp = Math.hypot(p.vel.x, p.vel.z);
       let tf = null;
       if (p.lockFacing !== null && p.busy > 0) tf = p.lockFacing;
-      else if (p.jockey && p.faceTo && sp < 6.5 && ball.owner !== p) {
+      else if ((p.jockey || p.userJockey) && p.faceTo && sp < 7.5 && ball.owner !== p) {
         // jockeying defenders / keepers shuffle while still facing the ball
         const fx = p.faceTo.x - p.pos.x, fz = p.faceTo.z - p.pos.z;
         if (fx * fx + fz * fz > 0.5) tf = Math.atan2(fx, fz);
@@ -2118,7 +2143,8 @@ export class Match {
       }
       p.turnRate = 0;
       if (tf !== null) {
-        const rate = ball.owner === p ? (p.sprint ? 5.5 : 7.5) : 10;
+        const userCtl = p.team.isUser && p === p.team.controlled;
+        const rate = ball.owner === p ? (userCtl ? (p.sprint ? 11 : 14) : (p.sprint ? 7 : 9)) : userCtl ? 14 : 10;
         const d = wrap(tf - p.facing);
         const step = clamp(d, -rate * dt, rate * dt);
         p.facing = wrap(p.facing + step);

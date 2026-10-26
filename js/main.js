@@ -5,7 +5,9 @@ import { loadPlayerAssets } from './model.js';
 import { Commentary } from './commentary.js';
 import { Input } from './input.js';
 import { Sound } from './audio.js';
-import { F, DIFFICULTY } from './config.js';
+import { F, DIFFICULTY, TEAMS } from './config.js';
+import * as SQ from './squad.js';
+import { card, statRows } from './cards.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -22,7 +24,7 @@ const weakDevice = (navigator.hardwareConcurrency || 4) <= 4 && /Android/i.test(
 const legacyAssist = store.get('assist', 'on') !== 'off';
 const DEFAULTS = {
   difficulty: 'pro', minutes: 6, camera: 'broadcast', camZoom: 100, graphics: weakDevice ? 'low' : 'high',
-  passAssist: legacyAssist, autoSwitch: legacyAssist, autoSprint: true,
+  passAssist: legacyAssist, autoSwitch: legacyAssist, autoSprint: true, defAssist: true,
   volume: 90, crowd: 100, sound: true, commentary: true,
   radar: true, fps: false, btnSize: 1, vibration: true, joyFixed: false,
 };
@@ -164,6 +166,7 @@ let assetsReady = false;
 function newMatch() {
   if (!assetsReady) return;
   if (match) match.dispose();
+  TEAMS.home.players = SQ.lineupForMatch(); // your starting XI from Squad
   match = new Match(scene, sound, settings, hooks);
 }
 
@@ -230,7 +233,7 @@ function goMenu() {
   setTimeout(() => {
     if (match && match.phase !== 'menu') newMatch();
     showScreen('menu');
-    syncMenu();
+    setTab('play');
     ui.fade.classList.remove('on');
   }, 260);
 }
@@ -254,12 +257,125 @@ function syncMenu() {
   seg($('menu').querySelector('[data-quick="difficulty"] .seg'), [['amateur', 'Amateur'], ['pro', 'Pro'], ['legend', 'Legend']], () => settings.difficulty, v => { setSetting('difficulty', v); syncMenu(); });
   seg($('menu').querySelector('[data-quick="minutes"] .seg'), [[4, '4 min'], [6, '6 min'], [10, '10 min']], () => settings.minutes, v => { setSetting('minutes', v); syncMenu(); });
   $('tip-text').textContent = tip();
+  const pr = SQ.profile();
+  $('team-ovr').textContent = SQ.teamOvr();
+  $('team-record').textContent = `${pr.record.w}W ${pr.record.d}D ${pr.record.l}L`;
+  $('team-stars').innerHTML = pr.lineup.filter(id => SQ.DB[id].star).map(id => `<span>${SQ.DB[id].name} ${SQ.ovr(id)}</span>`).join('');
+  updateCoins();
 }
+
+// ---------------------------------------------------------------- hub tabs: play / squad / shop
+let tab = 'play';
+function setTab(t) {
+  tab = t;
+  for (const b of $('tabs').querySelectorAll('button')) b.classList.toggle('on', b.dataset.tab === t);
+  for (const id of ['play', 'squad', 'shop']) $('page-' + id).classList.toggle('hidden', id !== t);
+  if (t === 'squad') renderSquad();
+  if (t === 'shop') renderShop();
+  if (t === 'play') syncMenu();
+}
+$('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setTab(b.dataset.tab); });
+$('team-tile').addEventListener('click', () => setTab('squad'));
+
+let coinShown = null;
+function updateCoins() {
+  const c = SQ.profile().coins;
+  $('coins').textContent = c.toLocaleString('en-US');
+  if (coinShown !== null && c !== coinShown) { const el = $('coins').parentElement; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+  coinShown = c;
+  $('shop-dot').classList.toggle('on', SQ.dailyReady());
+}
+let toastTimer = 0;
+function toast(msg, icon = 'check') {
+  const t = $('toast');
+  t.innerHTML = `<svg class="ico"><use href="#i-${icon}"/></svg>${msg}`;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+const coin = n => `<svg class="ico"><use href="#i-coin"/></svg>${n.toLocaleString('en-US')}`;
+
+// squad: pitch (attacking to the right) + reserves + player detail
+const SLOT_XY = [[8, 50], [30, 14], [24, 37], [24, 63], [30, 86], [53, 26], [46, 50], [53, 74], [79, 16], [86, 50], [79, 84]];
+let selSlot = null, selBench = null;
+function renderSquad() {
+  const pr = SQ.profile();
+  const pitch = $('pitch');
+  pitch.innerHTML = pr.lineup.map((id, i) => `<button class="slot${selSlot === i ? ' sel' : ''}${selSlot !== null && selSlot !== i ? ' swap-target' : ''}" data-slot="${i}" style="left:${SLOT_XY[i][0]}%;top:${SLOT_XY[i][1]}%">${card(id, { mini: true })}<span class="pos-tag">${SQ.slotPos(i)}</span></button>`).join('');
+  const bench = pr.owned.filter(id => !pr.lineup.includes(id)).sort((a, b) => SQ.ovr(b) - SQ.ovr(a));
+  $('bench').innerHTML = bench.length ? bench.map(id => `<button class="bench-card${selBench === id ? ' sel' : ''}" data-id="${id}">${card(id, { mini: true })}</button>`).join('') : '<div class="empty-bench">No reserves — sign players in the Shop.</div>';
+  const focus = selBench || (selSlot !== null ? pr.lineup[selSlot] : null);
+  const det = $('squad-detail');
+  if (!focus) {
+    det.innerHTML = `<div class="sd-empty"><b>ZorpFC · ${SQ.teamOvr()} OVR</b><span>Tap a player to see his card and train him.</span><span>Tap two players on the pitch to swap positions, or a player then a reserve to substitute.</span></div>`;
+    return;
+  }
+  const p = SQ.DB[focus], lvl = SQ.level(focus), cost = SQ.trainCost(focus);
+  const maxed = lvl >= SQ.MAX_LEVEL || SQ.ovr(focus) >= 99;
+  det.innerHTML = `${card(focus)}<div class="sd-info"><h3>${p.name}</h3><div class="sub">${p.pos} · #${p.num} · ${SQ.ovr(focus)} OVR</div>
+    <div class="bars">${statRows(focus).map(([k, v]) => `<div>${k}<i style="--v:${v}%"></i><b>${v}</b></div>`).join('')}</div>
+    <div class="lv">${Array.from({ length: SQ.MAX_LEVEL }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</div>
+    <button class="train-btn" id="train-btn" ${maxed || SQ.profile().coins < cost ? 'disabled' : ''}><svg class="ico"><use href="#i-bolt"/></svg>${maxed ? 'MAXED' : `TRAIN +1 <small>${coin(cost)}</small>`}</button></div>`;
+  const tb = $('train-btn');
+  if (tb) tb.addEventListener('click', () => {
+    if (SQ.train(focus)) { toast(`${p.name} trained to ${SQ.ovr(focus)} OVR`, 'bolt'); sound.kick && sound.ctx && sound.kick(0.2); renderSquad(); updateCoins(); }
+  });
+}
+$('pitch').addEventListener('click', e => {
+  const b = e.target.closest('.slot');
+  if (!b) return;
+  const i = Number(b.dataset.slot);
+  if (selBench) { SQ.swap(i, selBench); toast(`${SQ.DB[selBench].name} comes into the XI`, 'swap'); selBench = null; selSlot = null; }
+  else if (selSlot === null) selSlot = i;
+  else if (selSlot === i) selSlot = null;
+  else { SQ.swap(selSlot, i); toast('Positions swapped', 'swap'); selSlot = null; }
+  renderSquad();
+});
+$('bench').addEventListener('click', e => {
+  const b = e.target.closest('.bench-card');
+  if (!b) return;
+  const id = b.dataset.id;
+  if (selSlot !== null) { SQ.swap(selSlot, id); toast(`${SQ.DB[id].name} comes into the XI`, 'swap'); selSlot = null; selBench = null; }
+  else selBench = selBench === id ? null : id;
+  renderSquad();
+});
+
+// shop: transfer market with a two-tap buy
+const FILTERS = [['all', 'All'], ['att', 'Attack'], ['mid', 'Midfield'], ['def', 'Defence'], ['gk', 'GK']];
+const GROUP = { ST: 'att', LW: 'att', RW: 'att', CM: 'mid', DM: 'mid', CB: 'def', LB: 'def', RB: 'def', GK: 'gk' };
+let shopFilter = 'all', confirmId = null;
+function renderShop() {
+  seg($('shop-filter'), FILTERS, () => shopFilter, v => { shopFilter = v; confirmId = null; renderShop(); });
+  const pr = SQ.profile();
+  const items = SQ.SHOP.filter(id => shopFilter === 'all' || GROUP[SQ.DB[id].pos] === shopFilter);
+  $('shop-grid').innerHTML = items.map(id => {
+    const p = SQ.DB[id], owned = pr.owned.includes(id);
+    const btn = owned ? `<button class="buy owned" disabled><svg class="ico"><use href="#i-check"/></svg>OWNED</button>`
+      : confirmId === id ? `<button class="buy confirm" data-buy="${id}">CONFIRM</button>`
+      : `<button class="buy" data-buy="${id}" ${pr.coins < p.price ? 'disabled' : ''}>${coin(p.price)}</button>`;
+    return `<div class="shop-item">${card(id)}${btn}</div>`;
+  }).join('');
+  const d = $('daily-btn');
+  d.disabled = !SQ.dailyReady();
+  $('daily-txt').textContent = SQ.dailyReady() ? 'Claim daily 750' : 'Daily claimed';
+}
+$('shop-grid').addEventListener('click', e => {
+  const b = e.target.closest('[data-buy]');
+  if (!b) return;
+  const id = b.dataset.buy;
+  if (confirmId !== id) { confirmId = id; renderShop(); return; }
+  confirmId = null;
+  if (SQ.buy(id)) { toast(`${SQ.DB[id].name} signed for ZorpFC!`, 'check'); sound.ctx && sound.cheer && sound.applause(); }
+  renderShop(); updateCoins();
+});
+$('daily-btn').addEventListener('click', () => {
+  const n = SQ.claimDaily();
+  if (n) { toast(`+${n} coins`, 'gift'); renderShop(); updateCoins(); }
+});
 setInterval(() => { if (state === 'menu') $('tip-text').textContent = tip(); }, 6000);
 
 $('play-btn').addEventListener('click', () => { if (match && state === 'menu') startPrematch(); });
 $('menu-settings').addEventListener('click', () => openSettings());
-$('menu-settings2').addEventListener('click', () => openSettings());
 $('menu-controls').addEventListener('click', () => openModal('help'));
 $('fs-btn').addEventListener('click', () => {
   if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen();
@@ -339,6 +455,11 @@ function showResult() {
     const t = (hv + av) || 1;
     return `<div class="st-row"><span>${hv}${u}</span><div class="bar"><i class="h" style="width:${hv / t * 100}%"></i><i class="a" style="width:${av / t * 100}%"></i><span>${label}</span></div><span>${av}${u}</span></div>`;
   }).join('');
+  if (!match.rewarded) {
+    match.rewarded = true;
+    const r = SQ.matchRewards(h, a, settings.difficulty);
+    $('ft-rewards').innerHTML = r.lines.map(([l, v]) => `<span>${l} +${v}</span>`).join('') + `<span class="total"><svg class="ico"><use href="#i-coin"/></svg>+${r.total}</span>`;
+  }
   showScreen('result');
   ui.hud.classList.add('hidden');
 }
@@ -387,6 +508,7 @@ const SCHEMA = [
   { tab: 'Gameplay', key: 'passAssist', label: 'Pass assist', desc: 'Passes go to who you aim at and follow him', type: 'toggle' },
   { tab: 'Gameplay', key: 'autoSwitch', label: 'Auto switch', desc: 'Control the closest defender automatically', type: 'toggle' },
   { tab: 'Gameplay', key: 'autoSprint', label: 'Auto sprint', desc: 'Push the joystick to the edge to sprint', type: 'toggle' },
+  { tab: 'Gameplay', key: 'defAssist', label: 'Defence assist', desc: 'Hold SPRINT to shadow the man on the ball', type: 'toggle' },
   { tab: 'Camera', key: 'camera', type: 'cams' },
   { tab: 'Camera', key: 'camZoom', label: 'Camera distance', desc: 'Closer or further than the preset', type: 'range', min: 80, max: 125, step: 5, unit: '%' },
   { tab: 'Audio', key: 'volume', label: 'Master volume', type: 'range', min: 0, max: 100, step: 5, unit: '%' },
@@ -399,7 +521,7 @@ const SCHEMA = [
   { tab: 'Controls', key: 'joyFixed', label: 'Fixed joystick', desc: 'Stays in the corner instead of following your thumb', type: 'toggle' },
   { tab: 'Controls', key: 'vibration', label: 'Vibration', type: 'toggle' },
 ];
-let setTab = 'Gameplay';
+let settingsTab = 'Gameplay';
 
 function setSetting(key, v) {
   settings[key] = v;
@@ -432,7 +554,7 @@ document.querySelectorAll('.modal').forEach(m => {
 });
 
 function openSettings(tab) {
-  if (tab) setTab = tab;
+  if (tab) settingsTab = tab;
   renderSettings();
   openModal('settings');
 }
@@ -443,12 +565,12 @@ function renderSettings() {
   for (const t of [...new Set(SCHEMA.map(s => s.tab))]) {
     const b = document.createElement('button');
     b.textContent = t;
-    b.classList.toggle('on', t === setTab);
-    b.addEventListener('click', () => { setTab = t; renderSettings(); });
+    b.classList.toggle('on', t === settingsTab);
+    b.addEventListener('click', () => { settingsTab = t; renderSettings(); });
     tabs.appendChild(b);
   }
   pane.innerHTML = '';
-  for (const s of SCHEMA.filter(x => x.tab === setTab)) {
+  for (const s of SCHEMA.filter(x => x.tab === settingsTab)) {
     if (s.type === 'cams') {
       const grid = document.createElement('div');
       grid.className = 'cam-grid';

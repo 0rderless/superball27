@@ -19,6 +19,32 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="g-coin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe98a"/><stop offset="1" stop-color="#f0a800"/></linearGradient>
+    </defs>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 5l8 11H4z" fill="currentColor"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 19L4 8h16z" fill="currentColor"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="M5 12l11-8v16z" fill="currentColor"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="M19 12L8 20V4z" fill="currentColor"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></symbol>
+    <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="url(#g-coin)"/><circle cx="12" cy="12" r="7" fill="none" stroke="#a86b00" stroke-width="1.6"/><path d="M12 7.5l1.3 2.8 3 .4-2.2 2.1.6 3-2.7-1.5-2.7 1.5.6-3-2.2-2.1 3-.4z" fill="#a86b00"/></symbol>
+    <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.2l3.2 2.3-1.2 3.8H10l-1.2-3.8zM12 2.6v4.6M15.2 9.5l4.3-1.4M14 13.3l2.7 3.7M10 13.3l-2.7 3.7M8.8 9.5L4.5 8.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-shirt" viewBox="0 0 24 24"><path d="M8 3l-5 3 2 5 2.5-1V21h9V10l2.5 1 2-5-5-3c-.5 2-2 3-4 3S8.5 5 8 3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2.5l2.2 11h10.8l2-8H7M10 20h.01M17 20h.01" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z M19.4 13.5l1.6 1.2-1.8 3.1-1.9-.6a7.6 7.6 0 0 1-1.7 1l-.4 2H11l-.4-2a7.6 7.6 0 0 1-1.7-1l-1.9.6-1.8-3.1 1.6-1.2a7.5 7.5 0 0 1 0-2l-1.6-1.2 1.8-3.1 1.9.6a7.6 7.6 0 0 1 1.7-1l.4-2h3.6l.4 2a7.6 7.6 0 0 1 1.7 1l1.9-.6 1.8 3.1-1.6 1.2a7.5 7.5 0 0 1 0 2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-pad" viewBox="0 0 24 24"><path d="M6 9h4M8 7v4M15 9h.01M18 11h.01M7.5 17.5 6 19c-1.3 1.3-3.5.4-3.5-1.5V12a6 6 0 0 1 6-6h7a6 6 0 0 1 6 6v5.5c0 1.9-2.2 2.8-3.5 1.5l-1.5-1.5a3 3 0 0 0-2.1-.9H9.6a3 3 0 0 0-2.1.9Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v4a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v4M8 21h8M9 17h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-gift" viewBox="0 0 24 24"><path d="M4 11h16v10H4zM3 7h18v4H3zM12 7v14M12 7c-1-3-5-4-5-1.5S10 7 12 7zM12 7c1-3 5-4 5-1.5S14 7 12 7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.5l2.9 6 6.6.8-4.9 4.6 1.3 6.6L12 17.3 6.1 20.5l1.3-6.6L2.5 9.3l6.6-.8z" fill="currentColor"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  </svg>
   <canvas id="c"></canvas>
   <div id="vignette"></div>
   <div id="fade"></div>
@@ -57,12 +83,19 @@
   <div id="menu" class="screen hidden">
     <header class="topbar">
       <div class="brand"><div class="brand-mark">27</div><div class="brand-txt"><b>SUPERBALL 27</b><small>Ontronop Games</small></div></div>
+      <nav class="tabs" id="tabs">
+        <button data-tab="play" class="on"><svg class="ico"><use href="#i-ball"/></svg><span>Play</span></button>
+        <button data-tab="squad"><svg class="ico"><use href="#i-shirt"/></svg><span>Squad</span></button>
+        <button data-tab="shop"><svg class="ico"><use href="#i-cart"/></svg><span>Shop</span><i class="dot" id="shop-dot"></i></button>
+      </nav>
       <div class="top-actions">
-        <button class="icon-btn" id="fs-btn" aria-label="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        <button class="icon-btn" id="menu-settings" aria-label="Settings"><svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z M19.4 13.5l1.6 1.2-1.8 3.1-1.9-.6a7.6 7.6 0 0 1-1.7 1l-.4 2H11l-.4-2a7.6 7.6 0 0 1-1.7-1l-1.9.6-1.8-3.1 1.6-1.2a7.5 7.5 0 0 1 0-2l-1.6-1.2 1.8-3.1 1.9.6a7.6 7.6 0 0 1 1.7-1l.4-2h3.6l.4 2a7.6 7.6 0 0 1 1.7 1l1.9-.6 1.8 3.1-1.6 1.2a7.5 7.5 0 0 1 0 2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
+        <div class="coin-pill"><svg class="ico"><use href="#i-coin"/></svg><b id="coins">0</b></div>
+        <button class="icon-btn" id="fs-btn" aria-label="Full screen"><svg class="ico"><use href="#i-full"/></svg></button>
+        <button class="icon-btn" id="menu-settings" aria-label="Settings"><svg class="ico"><use href="#i-gear"/></svg></button>
       </div>
     </header>
-    <main class="hub">
+
+    <main class="page" id="page-play">
       <button class="tile tile-hero" id="play-btn">
         <div class="hero-art"></div>
         <div class="hero-shade"></div>
@@ -74,24 +107,43 @@
           <div class="mu-team"><div class="crest crest-away"><span>V</span></div><b>Varcelona</b></div>
         </div>
         <div class="tile-meta"><span id="meta-diff">Pro</span><span id="meta-len">6 min</span><span id="meta-cam">Broadcast</span></div>
-        <div class="play-fab"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></div>
+        <div class="play-fab"><svg class="ico"><use href="#i-play"/></svg></div>
       </button>
       <div class="hub-col">
+        <button class="tile tile-team" id="team-tile">
+          <div class="tt-ovr"><b id="team-ovr">80</b><small>TEAM OVR</small></div>
+          <div class="tt-info"><b>ZorpFC</b><small>4-3-3 · <span id="team-record">0W 0D 0L</span></small><div class="tt-stars" id="team-stars"></div></div>
+        </button>
         <div class="tile tile-quick">
           <div class="q-row" data-quick="difficulty"><label>Difficulty</label><div class="seg"></div></div>
           <div class="q-row" data-quick="minutes"><label>Match length</label><div class="seg"></div></div>
         </div>
         <button class="tile tile-small" id="menu-controls">
-          <svg viewBox="0 0 24 24"><path d="M6 9h4M8 7v4M15 9h.01M18 11h.01M7.5 17.5 6 19c-1.3 1.3-3.5.4-3.5-1.5V12a6 6 0 0 1 6-6h7a6 6 0 0 1 6 6v5.5c0 1.9-2.2 2.8-3.5 1.5l-1.5-1.5a3 3 0 0 0-2.1-.9H9.6a3 3 0 0 0-2.1.9Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg class="ico"><use href="#i-pad"/></svg>
           <div><b>CONTROLS</b><small>Gestures, passes &amp; skills</small></div>
-        </button>
-        <button class="tile tile-small" id="menu-settings2">
-          <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
-          <div><b>SETTINGS</b><small>Camera, audio, graphics</small></div>
         </button>
       </div>
     </main>
-    <footer class="ticker"><span class="tk-label">TIP</span><span id="tip-text"></span><span class="install-tip" id="install-tip">Share → Add to Home Screen for full-screen play</span></footer>
+
+    <main class="page hidden" id="page-squad">
+      <div class="pitch" id="pitch"></div>
+      <aside class="squad-side">
+        <div class="squad-detail" id="squad-detail"></div>
+        <div class="bench-head"><b>RESERVES</b><small>Tap a player on the pitch, then a reserve to swap</small></div>
+        <div class="bench" id="bench"></div>
+      </aside>
+    </main>
+
+    <main class="page hidden" id="page-shop">
+      <div class="shop-bar">
+        <div class="seg shop-filter" id="shop-filter"></div>
+        <button class="daily" id="daily-btn"><svg class="ico"><use href="#i-gift"/></svg><span id="daily-txt">Daily reward</span></button>
+      </div>
+      <div class="shop-grid" id="shop-grid"></div>
+    </main>
+
+    <footer class="ticker"><span class="tk-label">TIP</span><span id="tip-text"></span><span class="install-tip" id="install-tip"><svg class="ico"><use href="#i-phone"/></svg>Add to Home Screen for full-screen play</span></footer>
+    <div class="toast" id="toast"></div>
   </div>
 
   <!-- ============ PRE-MATCH LOADING ============ -->
@@ -136,10 +188,10 @@
     <div id="joy-base" class="idle"><div id="joy-knob"></div></div>
     <div id="buttons">
       <button class="btn b-sprint" data-btn="sprint"><span>SPRINT</span></button>
-      <button class="btn b-pass" data-btn="pass"><i class="flick">&#9650; HIGH</i><span>PASS</span></button>
-      <button class="btn b-shoot" data-btn="shoot"><i class="flick">&#9650; CHIP</i><span>SHOOT</span></button>
-      <button class="btn b-through" data-btn="through"><i class="flick">&#9650; LOB</i><span>THROUGH</span></button>
-      <button class="btn b-skill" data-btn="skill"><i class="sk sk-u">&#9650;</i><i class="sk sk-d">&#9660;</i><i class="sk sk-l">&#9664;</i><i class="sk sk-r">&#9654;</i><span>SKILL</span></button>
+      <button class="btn b-pass" data-btn="pass"><i class="flick"><svg class="ico"><use href="#i-up"/></svg>HIGH</i><span>PASS</span></button>
+      <button class="btn b-shoot" data-btn="shoot"><i class="flick"><svg class="ico"><use href="#i-up"/></svg>CHIP</i><span>SHOOT</span></button>
+      <button class="btn b-through" data-btn="through"><i class="flick"><svg class="ico"><use href="#i-up"/></svg>LOB</i><span>THROUGH</span></button>
+      <button class="btn b-skill" data-btn="skill"><svg class="sk sk-u"><use href="#i-up"/></svg><svg class="sk sk-d"><use href="#i-down"/></svg><svg class="sk sk-l"><use href="#i-left"/></svg><svg class="sk sk-r"><use href="#i-right"/></svg><span>SKILL</span></button>
     </div>
   </div>
 
@@ -150,7 +202,7 @@
         <h2>PAUSED</h2>
         <div class="pp-score"><span class="pp-h">ZFC</span><b id="pp-score">0 - 0</b><span class="pp-a">VAR</span><small id="pp-time">00:00</small></div>
       </div>
-      <button class="mbtn primary" id="resume-btn"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>Resume</button>
+      <button class="mbtn primary" id="resume-btn"><svg class="ico"><use href="#i-play"/></svg>Resume</button>
       <div class="pp-label">Camera</div>
       <div class="cam-strip" id="pause-cams"></div>
       <div class="pp-grid">
@@ -165,7 +217,7 @@
   <!-- ============ SETTINGS ============ -->
   <div id="settings" class="modal hidden">
     <div class="modal-card">
-      <div class="modal-head"><h2>SETTINGS</h2><button class="icon-btn close" data-close aria-label="Close">&#10005;</button></div>
+      <div class="modal-head"><h2>SETTINGS</h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
       <div class="set-body">
         <nav class="set-tabs" id="set-tabs"></nav>
         <div class="set-pane" id="set-pane"></div>
@@ -176,14 +228,14 @@
   <!-- ============ CONTROLS GUIDE ============ -->
   <div id="help" class="modal hidden">
     <div class="modal-card">
-      <div class="modal-head"><h2>CONTROLS</h2><button class="icon-btn close" data-close aria-label="Close">&#10005;</button></div>
+      <div class="modal-head"><h2>CONTROLS</h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
       <div class="help-grid">
         <div class="hg"><h4>Move</h4><p>Left thumb anywhere on the left side. Push to the edge to sprint, or hold <b>SPRINT</b>.</p></div>
         <div class="hg"><h4>Pass</h4><p><b>Tap</b> = low pass to the player you aim at. <b>Flick up</b> = high pass.</p></div>
         <div class="hg"><h4>Through</h4><p><b>Tap</b> = ball into space. <b>Flick up</b> = lobbed over the defence.</p></div>
         <div class="hg"><h4>Shoot</h4><p><b>Hold</b> for power, release for a driven shot. <b>Flick up</b> while holding = chip.</p></div>
-        <div class="hg"><h4>Skill</h4><p><b>Tap</b> step-over · <b>◀ ▶</b> La Croqueta · <b>▲</b> rainbow flick · <b>▼</b> drag-back.</p></div>
-        <div class="hg"><h4>Defend</h4><p><b>SWITCH</b> player · <b>TACKLE</b> · hold <b>PRESS</b> to chase · <b>SLIDE</b> tackle.</p></div>
+        <div class="hg"><h4>Skill</h4><p><b>Tap</b> step-over · <b><svg class="ico in"><use href="#i-left"/></svg><svg class="ico in"><use href="#i-right"/></svg></b> La Croqueta · <b><svg class="ico in"><use href="#i-up"/></svg></b> rainbow flick · <b><svg class="ico in"><use href="#i-down"/></svg></b> drag-back.</p></div>
+        <div class="hg"><h4>Defend</h4><p><b>SWITCH</b> player · <b>TACKLE</b> · hold <b>PRESS</b> to chase · <b>SLIDE</b> tackle · hold <b>SPRINT</b> to shadow the ball carrier.</p></div>
         <div class="hg"><h4>One-touch</h4><p>Press PASS or SHOOT while a pass is coming to you to play it first time.</p></div>
         <div class="hg"><h4>Keyboard</h4><p>WASD · Space/U pass · K/O shoot · L/Y through · Shift sprint · E skill · P pause.</p></div>
       </div>
@@ -201,6 +253,7 @@
       </div>
       <div id="ft-msg"></div>
       <div id="ft-stats"></div>
+      <div class="rewards" id="ft-rewards"></div>
       <div class="row">
         <button class="mbtn primary" id="again-btn">Play again</button>
         <button class="mbtn" id="menu-btn">Main menu</button>

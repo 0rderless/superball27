@@ -18,7 +18,7 @@ A 3D mobile football game built with plain **HTML + CSS + JavaScript + Three.js*
 | THROUGH | Tap = ground through ball · flick up = lobbed | Hold to PRESS |
 | SHOOT | Hold for power, release = low driven shot · flick up while holding = chip | TACKLE |
 | SKILL | Tap = step-over · swipe ◀ ▶ = La Croqueta · ▲ = rainbow flick · ▼ = drag-back | SLIDE tackle |
-| SPRINT | Hold to sprint (ZorpFC never tire) | same |
+| SPRINT | Hold to sprint (ZorpFC never tire) | Hold with no joystick = defence assist (shadows the ball carrier) |
 
 Press PASS/SHOOT while a pass is still travelling to you for a **one-touch pass / first-time shot**.
 After a goal, tap to skip the replay. Keyboard: WASD/arrows, Space pass / U high pass, K shoot / O chip,
@@ -35,6 +35,13 @@ L through / Y lobbed through, Shift sprint, E skill, P pause.
 - Team AI in a 4-3-3: pressing, jockeying, cover, marking, runs in behind, crosses, keeper positioning and saves
 - Corners, throw-ins, goal kicks, kick-offs, half time, full-time stats
 - 3 difficulties, 4/6/10 minute matches, 3 camera distances, Smooth/HD graphics, assists on/off
+
+## Squad, shop & progression
+- **Squad**: drag-free tap-to-swap on a 4-3-3 pitch; reserves bench; FC-style player cards with tiers (bronze/silver/gold/rare/icon/superstar).
+- **Stars**: Ronaldo (ST, 99) and Germain Silver (LW, 99) start for ZorpFC.
+- **Shop**: 17 players to sign with coins; daily 750-coin reward.
+- **Training**: spend coins to raise a player's attributes (+1 per level, up to +10).
+- **Coins**: earned every match (win/draw, goals, clean sheet; Legend pays 1.5x). Progress is saved on the device.
 
 ## Credits
 - Player model and animations: [Quaternius — Universal Animation Library 1 & 2](https://quaternius.com/packs/universalanimationlibrary.html), CC0 (`assets/LICENSE-Quaternius.txt`). `tools/build-players.mjs` rebuilds `assets/player.glb` from the original packs.
