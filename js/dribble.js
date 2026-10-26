@@ -3,7 +3,7 @@
 // in front of the next footfall.
 
 // gait phases (0..1 per two-step cycle) where the right / left foot lands
-export const STRIKES = [0, 0.5];
+export const STRIKES = [0.51, 0]; // measured with tools/measure-strikes.mjs
 // constant rolling deceleration of a dribbled ball (m/s²)
 export const ROLL_DECEL = 2.0;
 

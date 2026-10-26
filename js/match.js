@@ -2,6 +2,7 @@ import * as THREE from '../lib/three.module.min.js';
 import { F, BALL_R, GRAVITY, FORMATIONS, FORMATION, kickoffShape, DIFFICULTY, TEAMS } from './config.js';
 import { createPlayerModel, animateModel, disposePlayerModel } from './model.js';
 import { Ball } from './ball.js';
+import { advanceGait } from './dribble.js';
 
 const V3 = THREE.Vector3;
 const { HL, HW, GW, GH, GD } = F;
@@ -44,7 +45,7 @@ class Player {
     this.a = {
       speed: 0, phase: Math.random() * 6, kickT: -1, kickPow: 0.5, tackleT: -1, slideT: -1, diveT: -1, diveSide: 1, diveHigh: false,
       headerT: -1, throwT: -1, throwReady: false, celebrate: 0, celebrateStyle: 0, sad: 0, hold: false, ready: false,
-      hitT: -1, hitBig: false, touchT: -1, touchSide: 0, skillT: -1, skillType: 'tap', skillSide: 1, moveAngle: 0, turnRate: 0, celebClip: 0, sadClip: 0,
+      hitT: -1, hitBig: false, touchT: -1, touchSide: 0, touchFoot: 'R', gait: Math.random(), strike: null, skillT: -1, skillType: 'tap', skillSide: 1, moveAngle: 0, turnRate: 0, celebClip: 0, sadClip: 0,
     };
     this.busy = 0;
     this.action = null;
@@ -2389,6 +2390,9 @@ export class Match {
         p.turnRate = step / Math.max(dt, 1e-3);
         p.fwd.set(Math.sin(p.facing), 0, Math.cos(p.facing));
       }
+      // one gait clock per player: footfalls drive dribble touches and the running animation
+      const g = advanceGait(p.a.gait, sp, dt);
+      p.a.gait = g.phase; p.a.strike = g.strike;
       const sprinting = p.sprint && sp > RUN * 0.92;
       p.stamina = p.team.isUser ? 1 : clamp(p.stamina + (sprinting ? -0.03 : 0.022) * dt, 0.2, 1);
     }
@@ -2459,7 +2463,6 @@ export class Match {
       const a = p.a;
       const sp = Math.hypot(p.vel.x, p.vel.z);
       a.speed = sp;
-      if (sp > 0.15) a.phase += dt * (4.3 + sp * 0.66);
       const adv = (k, dur) => { if (a[k] >= 0) { a[k] += dt / dur; if (a[k] > 1) a[k] = -1; } };
       adv('kickT', a.kickDur || 0.42); adv('tackleT', 0.5); adv('slideT', 1.0); adv('headerT', 0.5); adv('throwT', 0.55); adv('hitT', 0.7); adv('touchT', 0.28); adv('skillT', a.skillDur || 0.6);
       a.moveAngle = sp > 0.3 ? wrap(Math.atan2(p.vel.x, p.vel.z) - p.facing) : 0;

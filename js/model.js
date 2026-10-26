@@ -363,17 +363,14 @@ export function animateModel(m, a, time, dt) {
   if (a.ready) { W.Crouch_Idle_Loop = 0.45 * W.Idle_Loop; W.Idle_Loop *= 0.55; }
   // smooth weights so transitions never pop
   const kw = 1 - Math.exp(-dt * 10);
-  let stride = 0, sum = 0;
   for (const n of LOCO) {
     m.w[n] += (W[n] - m.w[n]) * kw;
-    if (STRIDE[n]) { stride += STRIDE[n] * m.w[n]; sum += m.w[n]; }
   }
-  // one shared gait phase keeps every blended clip on the same foot
-  if (sum > 0.05 && sp > 0.1) m.phase = (m.phase + dt * sp / (stride / sum)) % 1;
+  // the simulation's gait clock (a.gait) keeps every blended clip on the same foot as the touches
   for (const n of LOCO) {
     const act = m.actions[n];
     act.setEffectiveWeight(m.w[n] * (1 - shotW));
-    if (STRIDE[n]) { act.timeScale = 0; act.time = m.phase * act.getClip().duration; }
+    if (STRIDE[n]) { act.timeScale = 0; act.time = (a.gait || 0) * act.getClip().duration; }
   }
   m.mixer.update(dt);
 
@@ -442,12 +439,13 @@ export function animateModel(m, a, time, dt) {
     rot(m, 'thigh_l', 'x', -0.3 * w); rot(m, 'calf_l', 'x', 0.5 * w); rot(m, 'calf_r', 'x', 0.7 * w);
   }
   if (a.touchT >= 0 && a.kickT < 0 && a.skillT < 0) {
-    // dribble touch: quick flick of the right foot (outside/inside for a turn)
+    // dribble touch: quick flick of the foot that touched it (outside/inside for a turn)
     const b2 = bell(a.touchT), sd = a.touchSide || 0;
-    rot(m, 'thigh_r', 'x', -0.35 * b2);
-    rot(m, 'calf_r', 'x', 0.25 * b2);
-    rot(m, 'thigh_r', 'z', sd * 0.3 * b2);
-    rot(m, 'foot_r', 'y', sd * 0.4 * b2);
+    const f = a.touchFoot === 'L' ? '_l' : '_r', mir = a.touchFoot === 'L' ? -1 : 1;
+    rot(m, 'thigh' + f, 'x', -0.35 * b2);
+    rot(m, 'calf' + f, 'x', 0.25 * b2);
+    rot(m, 'thigh' + f, 'z', sd * 0.3 * b2 * mir);
+    rot(m, 'foot' + f, 'y', sd * 0.4 * b2 * mir);
   }
   if (a.skillT >= 0) skillPose(m, a);
   if (a.hold) blendPose(m, A.poses.hold, 0.9);

@@ -13,16 +13,16 @@ test('strideLength matches walk / jog / sprint anchors and rises in between', ()
 });
 
 test('advanceGait reports the left strike when crossing it', () => {
-  const from = STRIKES[1] - 0.05;
+  const from = (STRIKES[1] - 0.05 + 1) % 1;
   const r = advanceGait(from, 5.5, 0.05);
   assert.equal(r.strike, 'L');
-  near(r.phase, from + 0.05 * 5.5 / 3.6, 1e-9);
+  near(r.phase, (from + 0.05 * 5.5 / 3.6) % 1, 1e-9);
 });
 
 test('advanceGait catches strikes inside a long frame (phone lag spike)', () => {
   const r1 = advanceGait((STRIKES[0] + 0.95) % 1, 9, 0.1); // crosses the right strike through the wrap
   assert.equal(r1.strike, 'R');
-  const r2 = advanceGait(STRIKES[1] - 0.1, 9, 0.1);
+  const r2 = advanceGait((STRIKES[1] - 0.1 + 1) % 1, 9, 0.1);
   assert.equal(r2.strike, 'L');
 });
 
