@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STRIKES, ROLL_DECEL, FOOT_REACH, strideLength, advanceGait, timeToNextStrike, slotDistance, planTouch } from '../js/dribble.js';
+import { STRIKES, ROLL_DECEL, FOOT_REACH, strideLength, advanceGait, timeToNextStrike, slotDistance, planTouch, exposure, tackleOutcome } from '../js/dribble.js';
 
 const near = (a, b, eps, msg) => assert.ok(Math.abs(a - b) <= eps, `${msg ?? ''} expected ${b} ±${eps}, got ${a}`);
 
@@ -79,4 +79,46 @@ for (const [label, sp, ang] of [['jog straight', 5.5, 0], ['sprint straight', 8.
 test('timeToNextStrike at jog is under half a cycle', () => {
   const t = timeToNextStrike(STRIKES[0] + 0.01, 5.5);
   assert.ok(t > 0 && t <= 0.5 * 3.6 / 5.5 + 1e-9);
+});
+
+test('exposure: ball at the feet is safe', () => {
+  assert.equal(exposure({ ball: { x: 0.2, z: 0 }, body: { x: 0, z: 0 }, heading: { x: 1, z: 0 }, defender: { x: 2, z: 0 }, sp: 5 }), 0);
+});
+
+test('exposure: ball out ahead with the defender in front is exposed', () => {
+  assert.ok(exposure({ ball: { x: 1.0, z: 0 }, body: { x: 0, z: 0 }, heading: { x: 1, z: 0 }, defender: { x: 1.8, z: 0.3 }, sp: 8 }) > 0.8);
+});
+
+test('exposure: shielding (body between defender and ball) protects it', () => {
+  assert.equal(exposure({ ball: { x: 1.0, z: 0 }, body: { x: 0, z: 0 }, heading: { x: 1, z: 0 }, defender: { x: -0.8, z: 0.1 }, sp: 3 }), 0);
+});
+
+test('tackleOutcome: exposed ball is won', () => {
+  assert.equal(tackleOutcome({ exposure: 0.9, def: 0.8, dri: 0.8, phy: 0.7, slide: false, rnd: 0.5 }), 'win');
+});
+
+test('tackleOutcome: ball at the feet is a miss', () => {
+  assert.equal(tackleOutcome({ exposure: 0.05, def: 0.8, dri: 0.8, phy: 0.7, slide: false, rnd: 0.5 }), 'miss');
+});
+
+test('tackleOutcome: half-exposed ball is poked loose', () => {
+  assert.equal(tackleOutcome({ exposure: 0.4, def: 0.8, dri: 0.8, phy: 0.7, slide: false, rnd: 0.5 }), 'loose');
+});
+
+test('planTouch with scale 0.45 (a cut) keeps the ball much closer', () => {
+  const pos = { x: 0, z: 0 }, vel = { x: 8.5, z: 0 }, dir = { x: 1, z: 0 }, ball = { x: 0.35, z: 0 };
+  const { v, T } = planTouch({ ball, pos, vel, dir, sp: 8.5, dri: 0.5, phase: STRIKES[0], scale: 0.45 });
+  let peak = 0;
+  for (let t = 0; t <= T; t += T / 50) { const p = roll(ball, v, t); peak = Math.max(peak, p.x - vel.x * t); }
+  assert.ok(peak <= 0.45 * slotDistance(8.5, 0.5) + 0.15, `peak ${peak}`);
+});
+
+test('advanceGait reports the swinging foot passing the body mid-step', () => {
+  // the left foot swings through a quarter cycle after the right foot lands
+  const r = advanceGait((STRIKES[0] + 0.2) % 1, 8, 0.05);
+  assert.equal(r.swing, 'L');
+  const q = advanceGait((STRIKES[1] + 0.2) % 1, 8, 0.05);
+  assert.equal(q.swing, 'R');
+  const none = advanceGait((STRIKES[0] + 0.05) % 1, 8, 0.01);
+  assert.equal(none.swing, null);
 });

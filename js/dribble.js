@@ -23,8 +23,10 @@ function crossed(a, b, s) {
   return a <= b ? s > a && s <= b : s > a || s <= b;
 }
 
+// strike: a foot landing this frame. swing: the other foot passing under the body mid-step
+// (a quarter cycle after a landing) — only used for quick cuts.
 export function advanceGait(phase, sp, dt) {
-  if (sp < 0.15) return { phase, strike: null };
+  if (sp < 0.15) return { phase, strike: null, swing: null };
   const step = dt * sp / strideLength(sp);
   const next = (phase + step) % 1;
   let strike = null;
@@ -35,7 +37,12 @@ export function advanceGait(phase, sp, dt) {
     if (r && l) strike = ((STRIKES[0] - phase + 1) % 1) > ((STRIKES[1] - phase + 1) % 1) ? 'R' : 'L';
     else strike = r ? 'R' : l ? 'L' : null;
   }
-  return { phase: next, strike };
+  let swing = null;
+  if (step < 1) {
+    if (crossed(phase, next, (STRIKES[0] + 0.25) % 1)) swing = 'L';
+    else if (crossed(phase, next, (STRIKES[1] + 0.25) % 1)) swing = 'R';
+  }
+  return { phase: next, strike, swing };
 }
 
 export function timeToNextStrike(phase, sp) {
@@ -54,8 +61,9 @@ export function slotDistance(sp, dri) {
 // A touch pushes the ball out and lets it roll back onto a later footfall, like a real dribble:
 // it runs about one slot ahead of him mid-way and meets the landing foot after a whole number
 // of steps. Returns the ball velocity and the time T until that footfall.
-export function planTouch({ ball, pos, vel, dir, sp, dri, phase }) {
-  const slot = slotDistance(sp, dri);
+// scale < 1 shortens the touch (a sharp cut keeps it tight).
+export function planTouch({ ball, pos, vel, dir, sp, dri, phase, scale = 1 }) {
+  const slot = Math.max(FOOT_REACH + 0.05, slotDistance(sp, dri) * scale);
   const first = timeToNextStrike(phase, sp);
   let T;
   if (!isFinite(first)) T = 0.4;
@@ -71,4 +79,24 @@ export function planTouch({ ball, pos, vel, dir, sp, dri, phase }) {
   let v = (d + 0.5 * ROLL_DECEL * T * T) / T;
   if (v < ROLL_DECEL * T) v = Math.sqrt(2 * ROLL_DECEL * d);
   return { v: { x: dx / d * v, z: dz / d * v }, T };
+}
+
+// How winnable the ball is for a defender: 0 at the feet, 1 when it's out at 1.1m. Zero when
+// the dribbler's body is between the defender and the ball (shielding).
+export function exposure({ ball, body, defender }) {
+  const bx = ball.x - body.x, bz = ball.z - body.z, bd = Math.hypot(bx, bz);
+  const e = Math.min(1, Math.max(0, (bd - 0.35) / (1.1 - 0.35)));
+  if (e === 0) return 0;
+  // defender → body direction vs body → ball direction: lined up means the body is in the way
+  const dx = body.x - defender.x, dz = body.z - defender.z, dd = Math.hypot(dx, dz);
+  if (dd > 1e-6 && (dx * bx + dz * bz) / (dd * bd) > Math.cos(Math.PI / 3)) return 0;
+  return e;
+}
+
+// Result of a tackle or poke. rnd ∈ [0, 1) is passed in so tests are deterministic.
+export function tackleOutcome({ exposure: e, def, dri, phy, slide, rnd }) {
+  const score = e + 0.15 * (def - dri) + (slide ? 0.1 : 0) + (rnd - 0.5) * 0.2;
+  if (score >= 0.55) return score - 0.55 >= 0.1 * phy ? 'win' : 'loose'; // strong dribblers keep it alive
+  if (score >= 0.35) return 'loose';
+  return 'miss';
 }

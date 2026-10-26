@@ -2,7 +2,7 @@ import * as THREE from '../lib/three.module.min.js';
 import { F, BALL_R, GRAVITY, FORMATIONS, FORMATION, kickoffShape, DIFFICULTY, TEAMS } from './config.js';
 import { createPlayerModel, animateModel, disposePlayerModel } from './model.js';
 import { Ball } from './ball.js';
-import { advanceGait, slotDistance, planTouch, ROLL_DECEL, FOOT_REACH } from './dribble.js';
+import { advanceGait, slotDistance, planTouch, ROLL_DECEL, FOOT_REACH, exposure, tackleOutcome } from './dribble.js';
 
 const V3 = THREE.Vector3;
 const { HL, HW, GW, GH, GD } = F;
@@ -276,7 +276,7 @@ export class Match {
     const ball = this.ball;
 
     for (const p of this.players) {
-      p.cool -= dt; p.stun -= dt; p.tackleCD -= dt; p.skillT -= dt; p.skillCD = (p.skillCD || 0) - dt;
+      p.cool -= dt; p.stun -= dt; p.tackleCD -= dt; p.pokeCD = (p.pokeCD || 0) - dt; p.skillT -= dt; p.skillCD = (p.skillCD || 0) - dt;
       if (p.busy > 0) p.busy -= dt;
     }
 
@@ -1106,22 +1106,20 @@ export class Match {
       else this.gainBall(p, false);
       return;
     }
-    let chance = 0.42 + 0.45 * p.st.def - 0.28 * o.st.dri + (o.sprint ? 0.12 : 0) + (slide ? 0.15 : 0);
-    if (!p.team.isUser) chance *= 0.65 + 0.35 * this.diff.tackle;
-    if (o.skillT > 0) chance -= 0.35;
-    if (Math.random() < chance) {
-      o.stun = slide ? 0.9 : 0.45;
-      o.a.hitT = 0; o.a.hitBig = slide;
-      if (!slide && Math.random() < 0.6) { this.gainBall(p, false); }
-      else {
-        ball.owner = null;
-        ball.vel.copy(p.fwd).multiplyScalar(rand(3, 6)).add(new V3(gauss() * 1.5, 0.3, gauss() * 1.5));
-        this.lastTouch = p;
-        o.cool = 0.4;
-      }
-      this.sound.kick(0.3);
-      if (p.team.isUser) { this.hooks.event('WON IT!'); this.say('tackle', {}, 1); }
+    const e = Math.max(0, exposure({ ball: ball.pos, body: o.pos, defender: p.pos }) - (o.skillT > 0 ? 0.35 : 0));
+    let rnd = Math.random();
+    if (!p.team.isUser) rnd = rnd * (0.65 + 0.35 * this.diff.tackle);
+    const res = tackleOutcome({ exposure: e, def: p.st.def, dri: o.st.dri, phy: o.st.phy || 0.7, slide, rnd });
+    if (res === 'miss') {
+      // mistimed: he's off balance and the dribbler is away
+      p.stun = 0.5; p.a.hitT = 0; p.a.hitBig = false;
+      return;
     }
+    o.stun = slide ? 0.9 : 0.45;
+    o.a.hitT = 0; o.a.hitBig = slide;
+    if (res === 'win' && !slide) { this.gainBall(p, false); this.sound.kick(0.3); }
+    else this.knockLoose(o, p, rand(3, 6));
+    if (p.team.isUser) { this.hooks.event('WON IT!'); this.say('tackle', {}, 1); }
   }
 
   // ---------------------------------------------------------------- ball
@@ -1189,6 +1187,22 @@ export class Match {
   // Footstep dribbling: the ball is touched only when a foot lands (o.a.strike), and every touch
   // rolls it onto a slot in front of the next footfall (see js/dribble.js). It is never lost
   // without a challenge: tackles, pokes, passes and shots are the only ways it leaves him.
+  // the ball is knocked away from the dribbler by a challenge
+  knockLoose(o, by, speed) {
+    const ball = this.ball;
+    ball.owner = null;
+    o.drib = null;
+    o.cool = 0.4;
+    const dir = new V3(ball.pos.x - by.pos.x, 0, ball.pos.z - by.pos.z);
+    if (dir.lengthSq() < 1e-6) dir.copy(by.fwd);
+    dir.normalize();
+    ball.vel.copy(dir).multiplyScalar(speed).add(new V3(gauss() * 1.2, 0.3, gauss() * 1.2));
+    this.lastTouch = by;
+    this.kickId++;
+    this.lastKick = { kind: 'tackle', team: by.team, id: this.kickId, by };
+    this.sound.kick(0.3);
+  }
+
   dribble(o, dt) {
     const ball = this.ball, b = ball.pos;
     const sp = Math.hypot(o.vel.x, o.vel.z);
@@ -1271,24 +1285,29 @@ export class Match {
     // (the footfall the last touch was planned for, or sooner if he's about to run over it)
     const atFoot = ahead > -0.2 && Math.abs(side) < 0.5 &&
       ((this.time >= D.nextT - 0.05 && ahead < FOOT_REACH + 0.32) || ahead < FOOT_REACH + 0.04);
-    const canCut = errD > 0.45 && dist < slot + 0.5 && ahead > -0.2 && this.time - D.lastTouchT > 0.15;
+    const canCut = errD > 0.45 && dist < slot + 0.5 && ahead > -0.2 && this.time - D.lastTouchT > 0.1;
     const letGo = dsp < 0.4 || (o.letGo && o.team.isUser && o === o.team.controlled);
     const runningAway = ahead > FOOT_REACH + 0.15 && D.v.x * hx + D.v.z * hz > sp;
     if ((strike || runningAway) && letGo && sp > 0.6 && dist < slot + 0.6 && ahead > -0.2) {
       // stick released: this footfall (or a stretch, if it's running away) traps it under the sole
       D.plant = clamp(sp * 0.08, 0.2, 0.6); D.px = hx; D.pz = hz;
       touch(0, 0, strike || (o.a.touchFoot === 'R' ? 'L' : 'R'));
-    } else if (strike && (atFoot || canCut)) {
+    } else if ((strike && (atFoot || canCut)) || (o.a.swing && canCut)) {
       if (errD > 1.9 && sp > 2.2) {
         // turning back: plant and stop it with the sole so it doesn't run away
         D.plant = clamp(sp * 0.06, 0.25, 0.5); D.px = hx; D.pz = hz;
-        touch(0, 0, strike);
+        touch(0, 0, strike || o.a.swing);
       } else {
         // along the run, or into the turn with the inside/outside of the foot
-        let dx = ux, dz = uz;
-        if (errD > 0.45) { const a2 = Math.atan2(hx, hz) + sgnD * Math.min(errD, 1.1) * 0.65; dx = Math.sin(a2); dz = Math.cos(a2); }
-        const { v, T } = planTouch({ ball: b, pos: o.pos, vel: o.vel, dir: { x: dx, z: dz }, sp, dri: ctrl, phase: o.a.gait });
-        touch(v.x, v.z, strike, errD > 0.45 ? sgnD : 0, T);
+        let dx = ux, dz = uz, vel = o.vel;
+        if (errD > 0.45) {
+          // a cut: push it into the turn and plan for where he'll be running, not where he was
+          const a2 = Math.atan2(hx, hz) + sgnD * Math.min(errD, 1.1); dx = Math.sin(a2); dz = Math.cos(a2);
+          const tsp = Math.min(dsp, sp);
+          vel = { x: o.vel.x * 0.3 + dx * tsp * 0.7, z: o.vel.z * 0.3 + dz * tsp * 0.7 };
+        }
+        const { v, T } = planTouch({ ball: b, pos: o.pos, vel, dir: { x: dx, z: dz }, sp, dri: ctrl, phase: o.a.gait, scale: errD > 0.45 ? 0.45 : 1 });
+        touch(v.x, v.z, strike || o.a.swing, errD > 0.45 ? sgnD : 0, T);
       }
     }
     // roll
@@ -1393,20 +1412,28 @@ export class Match {
       if (ball.held || o.skillT > 0 || o.pending) return;
       for (const d of o.team.opp.players) {
         if (d.stun > 0 || d.busy > 0 || d.isGK) continue;
-        const fx = d.pos.x + d.fwd.x * 0.4, fz = d.pos.z + d.fwd.z * 0.4;
-        const dist = Math.hypot(ball.pos.x - fx, ball.pos.z - fz);
-        if (dist > 0.8) continue;
-        let rate;
-        if (d.team.isUser) rate = d === d.team.controlled ? 1.1 : 0.4;
-        else rate = 1.25 * this.diff.tackle * this.diff.press;
-        rate *= (0.55 + d.st.def * 0.8) * (1.35 - o.st.dri * 0.65) * (o.sprint ? 1.35 : 1) * (1.25 - (o.st.phy || 0.7) * 0.4) * (Math.hypot(o.vel.x, o.vel.z) < 2.5 ? 0.55 + 0.25 * (1 - (o.st.phy || 0.7)) : 1);
-        if (Math.random() < rate * dt) {
-          o.stun = 0.35;
-          o.a.hitT = 0; o.a.hitBig = false;
-          this.gainBall(d, false);
+        // the ball runs into his legs: blocked
+        if (hdist(d.pos, ball.pos) < 0.42) {
+          const facing = (ball.pos.x - d.pos.x) * d.fwd.x + (ball.pos.z - d.pos.z) * d.fwd.z > 0;
+          if (facing) this.gainBall(d, false);
+          else this.knockLoose(o, d, 2.5);
           if (d.team.isUser) this.hooks.event('BALL WON');
           return;
         }
+        // a poke at an exposed ball (only when it's out away from the dribbler's feet)
+        if ((d.pokeCD || 0) > 0) continue;
+        const fx = d.pos.x + d.fwd.x * 0.4, fz = d.pos.z + d.fwd.z * 0.4;
+        if (Math.hypot(ball.pos.x - fx, ball.pos.z - fz) > 0.7) continue;
+        const e = exposure({ ball: ball.pos, body: o.pos, defender: d.pos });
+        if (e <= 0.5) continue;
+        d.pokeCD = 0.6;
+        const res = tackleOutcome({ exposure: e, def: d.st.def, dri: o.st.dri, phy: o.st.phy || 0.7, slide: false, rnd: Math.random() });
+        if (res === 'miss') continue;
+        o.stun = 0.35; o.a.hitT = 0; o.a.hitBig = false;
+        if (res === 'win') this.gainBall(d, false);
+        else this.knockLoose(o, d, rand(3, 5));
+        if (d.team.isUser) this.hooks.event('BALL WON');
+        return;
       }
       return;
     }
@@ -2383,7 +2410,7 @@ export class Match {
       }
       // one gait clock per player: footfalls drive dribble touches and the running animation
       const g = advanceGait(p.a.gait, sp, dt);
-      p.a.gait = g.phase; p.a.strike = g.strike;
+      p.a.gait = g.phase; p.a.strike = g.strike; p.a.swing = g.swing;
       const sprinting = p.sprint && sp > RUN * 0.92;
       p.stamina = p.team.isUser ? 1 : clamp(p.stamina + (sprinting ? -0.03 : 0.022) * dt, 0.2, 1);
     }
