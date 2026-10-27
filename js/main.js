@@ -8,7 +8,8 @@ import { Sound } from './audio.js';
 import { F, DIFFICULTY, DIFF_KEYS, TEAMS, FORMATIONS } from './config.js';
 import { CLUBS, teamConfig, crestSVG, zorpCrestSVG } from './clubs.js';
 import * as SQ from './squad.js';
-import { card, clubCard, avatar } from './cards.js';
+import { card, clubCard, avatar, cardView, rowsFor } from './cards.js';
+import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -333,7 +334,7 @@ $('store-tile').addEventListener('click', () => setTab('shop'));
 let coinShown = null;
 function updateCoins() {
   const c = SQ.profile().coins;
-  $('coins').textContent = c.toLocaleString('en-US');
+  $('coins').textContent = SQ.INFINITE_COINS ? '∞' : c.toLocaleString('en-US');
   if (coinShown !== null && c !== coinShown) { const el = $('coins').parentElement; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
   coinShown = c;
   $('shop-dot').classList.toggle('on', SQ.dailyReady());
@@ -427,7 +428,7 @@ function renderShop() {
     const p = SQ.DB[id], owned = pr.owned.includes(id);
     const btn = owned ? `<button class="buy owned" disabled><svg class="ico"><use href="#i-check"/></svg>OWNED</button>`
       : confirmId === id ? `<button class="buy confirm" data-buy="${id}">CONFIRM</button>`
-      : `<button class="buy" data-buy="${id}" ${pr.coins < p.price ? 'disabled' : ''}>${coin(p.price)}</button>`;
+      : `<button class="buy" data-buy="${id}" ${!SQ.INFINITE_COINS && pr.coins < p.price ? 'disabled' : ''}>${coin(p.price)}</button>`;
     return `<div class="shop-item">${card(id)}${btn}</div>`;
   }).join('');
   const d = $('daily-btn');
@@ -448,6 +449,82 @@ $('daily-btn').addEventListener('click', () => {
   if (n) { toast(`+${n} coins`, 'gift'); renderShop(); updateCoins(); }
 });
 setInterval(() => { if (state === 'menu') $('tip-text').textContent = tip(); }, 6000);
+
+// ---------------------------------------------------------------- player editor
+const ED_STATS = [['pac', 'Pace'], ['sho', 'Shooting'], ['pas', 'Passing'], ['dri', 'Dribbling'], ['def', 'Defending'], ['phy', 'Physical'], ['gk', 'Goalkeeping']];
+const CARD_NAMES = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', rare: 'Rare gold', icon: 'Icon', star: 'Superstar', toty: 'TOTY', ruby: 'Ruby', emerald: 'Emerald', black: 'Black' };
+let edId = null, ed = null;
+function edLoad(id) {
+  edId = id;
+  const p = id ? SQ.DB[id] : null;
+  ed = p ? { name: p.name, pos: p.pos, num: p.num, skin: p.skin, hair: p.hair, style: p.style, a: { ...SQ.attrs(id) }, base: p.base || 0, card: p.card || '' }
+    : { name: 'New Player', pos: 'ST', num: 9, skin: 2, hair: 0, style: 0, a: { pac: 80, sho: 80, pas: 75, dri: 80, def: 40, phy: 70, gk: 25 }, base: 0, card: '' };
+  edForm();
+}
+function edOvr() {
+  if (ed.base) return ed.base;
+  // same weighting as the squad screen, via a throwaway preview player
+  const w = { GK: { gk: 1 }, CB: { def: .55, phy: .2, pas: .15, pac: .1 }, LB: { def: .4, pac: .3, pas: .2, dri: .1 }, RB: { def: .4, pac: .3, pas: .2, dri: .1 }, DM: { def: .4, pas: .35, phy: .15, dri: .1 }, CM: { pas: .4, dri: .25, def: .1, sho: .15, pac: .1 }, LW: { pac: .3, dri: .35, sho: .2, pas: .15 }, RW: { pac: .3, dri: .35, sho: .2, pas: .15 }, ST: { sho: .45, pac: .2, dri: .2, phy: .1, pas: .05 } }[ed.pos];
+  let v = 0; for (const k in w) v += ed.a[k] * w[k];
+  return Math.min(99, Math.round(v + 2));
+}
+function edPreview() {
+  const o = edOvr();
+  const t = ed.card || (o >= 88 ? 'rare' : o >= 75 ? 'gold' : o >= 65 ? 'silver' : 'bronze');
+  $('ed-preview').innerHTML = cardView({ name: ed.name, pos: ed.pos, num: ed.num, ovr: o, tier: t, rows: rowsFor(ed.pos, ed.a), look: ed });
+}
+function edForm() {
+  const pr = SQ.profile();
+  const ids = Object.keys(SQ.DB).filter(id => pr.owned.includes(id) || SQ.SHOP.includes(id));
+  $('ed-pick').innerHTML = `<option value="">+ Create new player</option>` + ids.map(id => `<option value="${id}" ${id === edId ? 'selected' : ''}>${SQ.DB[id].name} · ${SQ.DB[id].pos} ${SQ.ovr(id)}${SQ.isCustom(id) ? ' (yours)' : SQ.isEdited(id) ? ' (edited)' : ''}</option>`).join('');
+  const sw = (key, list) => list.map((c, i) => `<button class="sw ${ed[key] === i ? 'on' : ''}" data-k="${key}" data-v="${i}" style="background:${c}"></button>`).join('');
+  $('ed-form').innerHTML = `
+    <label class="ed-row"><span>Name</span><input id="ed-name" maxlength="22" value="${ed.name.replace(/"/g, '&quot;')}"></label>
+    <div class="ed-row"><span>Position</span><div class="ed-chips">${SQ.POSITIONS.map(p => `<button class="chip ${ed.pos === p ? 'on' : ''}" data-k="pos" data-v="${p}">${p}</button>`).join('')}</div></div>
+    <label class="ed-row"><span>Number</span><input id="ed-num" type="number" min="1" max="99" value="${ed.num}"></label>
+    ${ED_STATS.map(([k, n]) => `<label class="ed-row ed-stat"><span>${n}</span><input type="range" min="1" max="99" data-stat="${k}" value="${ed.a[k]}"><b>${ed.a[k]}</b></label>`).join('')}
+    <label class="ed-row ed-stat"><span>Overall</span><input type="range" min="0" max="99" data-base value="${ed.base}"><b>${ed.base || 'auto'}</b></label>
+    <div class="ed-row"><span>Skin tone</span><div class="ed-chips">${sw('skin', SKINS)}</div></div>
+    <div class="ed-row"><span>Hair colour</span><div class="ed-chips">${sw('hair', HAIRS)}</div></div>
+    <div class="ed-row"><span>Hair style</span><div class="ed-chips">${['Short', 'Buzz', 'Swept', 'Afro', 'Long', 'Shaved'].map((n, i) => `<button class="chip ${ed.style === i ? 'on' : ''}" data-k="style" data-v="${i}">${n}</button>`).join('')}</div></div>
+    <div class="ed-row"><span>Card</span><div class="ed-chips"><button class="chip ${!ed.card ? 'on' : ''}" data-k="card" data-v="">Auto</button>${SQ.CARDS.map(c => `<button class="chip card-chip t-${c} ${ed.card === c ? 'on' : ''}" data-k="card" data-v="${c}">${CARD_NAMES[c]}</button>`).join('')}</div></div>`;
+  $('ed-remove').textContent = edId && SQ.isCustom(edId) ? 'Delete' : 'Reset';
+  $('ed-remove').disabled = !edId || !(SQ.isCustom(edId) || SQ.isEdited(edId));
+  edPreview();
+}
+$('ed-pick').addEventListener('change', e => edLoad(e.target.value || null));
+$('ed-form').addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'ed-name') ed.name = t.value;
+  else if (t.id === 'ed-num') ed.num = +t.value;
+  else if (t.dataset.stat) { ed.a[t.dataset.stat] = +t.value; t.nextElementSibling.textContent = t.value; }
+  else if (t.hasAttribute('data-base')) { ed.base = +t.value; t.nextElementSibling.textContent = +t.value || 'auto'; }
+  edPreview();
+});
+$('ed-form').addEventListener('click', e => {
+  const b = e.target.closest('[data-k]');
+  if (!b) return;
+  const k = b.dataset.k, v = b.dataset.v;
+  ed[k] = k === 'pos' || k === 'card' ? v : +v;
+  b.parentElement.querySelectorAll('[data-k]').forEach(x => x.classList.toggle('on', x === b));
+  edPreview();
+});
+$('ed-save').addEventListener('click', () => {
+  const id = SQ.savePlayer(edId, ed);
+  if (!id) return;
+  toast(edId ? `${ed.name} updated` : `${ed.name} created and added to your squad`, 'check');
+  edLoad(id);
+  if (tab === 'shop') renderShop(); syncMenu();
+});
+$('ed-remove').addEventListener('click', () => {
+  if (!edId) return;
+  const custom = SQ.isCustom(edId), name = SQ.DB[edId].name;
+  if (!SQ.removePlayer(edId)) { toast('Take him out of your starting XI first', 'close'); return; }
+  toast(custom ? `${name} deleted` : `${name} reset`, 'check');
+  edLoad(custom ? null : edId);
+  if (tab === 'shop') renderShop(); syncMenu();
+});
+$('editor-btn').addEventListener('click', () => { edLoad(null); openModal('editor'); });
 
 $('play-btn').addEventListener('click', () => { if (match && state === 'menu') startMatchmaking(); });
 $('menu-settings').addEventListener('click', () => openSettings());
@@ -767,7 +844,7 @@ function applyAudio() { sound.setVolume(settings.volume / 100, settings.crowd / 
 for (const k in DEFAULTS) applySetting(k);
 
 function openModal(id) { $(id).classList.remove('hidden'); }
-function closeModals() { for (const id of ['settings', 'help']) $(id).classList.add('hidden'); }
+function closeModals() { for (const id of ['settings', 'help', 'editor']) $(id).classList.add('hidden'); }
 document.querySelectorAll('.modal').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-close]')) { m.classList.add('hidden'); if (state === 'paused') buildCamStrip(); } });
 });

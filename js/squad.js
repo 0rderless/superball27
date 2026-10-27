@@ -40,10 +40,26 @@ export const DB = {
   hallstrom: P('hallstrom', 'Hallström', 'ST', 29, [0, 4, 4], A(89, 95, 80, 88, 42, 90), { price: 32000 }),
   maestro: P('maestro', 'El Maestro', 'CM', 88, [2, 0, 0], A(80, 90, 98, 96, 70, 76), { price: 60000, icon: true }),
   okoro: P('okoro', 'Titan Okoro', 'CB', 44, [5, 5, 1], A(86, 55, 80, 70, 97, 98), { price: 52000, icon: true }),
+  // ---- legends & stars (look: skin 0-5, hair colour 0-5, hair style 0-5 where 5 = shaved)
+  rcarlos: P('rcarlos', 'Roberto Carlos', 'LB', 6, [3, 5, 5], A(95, 86, 84, 88, 84, 86), { price: 45000, icon: true }),
+  marcelo: P('marcelo', 'Marcelo', 'LB', 12, [3, 5, 3], A(86, 74, 87, 93, 80, 76), { price: 38000, icon: true }),
+  vvd: P('vvd', 'Van\u00a0Dijk', 'CB', 4, [4, 5, 1], A(80, 60, 76, 72, 93, 92), { price: 40000, icon: true }),
+  ramos: P('ramos', 'Sergio Ramos', 'CB', 4, [1, 1, 0], A(82, 72, 76, 74, 93, 90), { price: 42000, icon: true }),
+  pepe: P('pepe', 'Pepe', 'CB', 3, [3, 5, 5], A(78, 50, 66, 64, 90, 91), { price: 30000, icon: true }),
+  maldini: P('maldini', 'Maldini', 'CB', 3, [1, 1, 2], A(84, 56, 80, 78, 96, 86), { price: 55000, icon: true }),
+  acole: P('acole', 'Ashley Cole', 'LB', 3, [4, 5, 1], A(90, 62, 80, 83, 88, 76), { price: 35000, icon: true }),
+  drogba: P('drogba', 'Drogba', 'ST', 11, [5, 5, 5], A(88, 93, 76, 84, 40, 96), { price: 48000, icon: true }),
+  jpedro: P('jpedro', 'João\u00a0Pedro', 'ST', 20, [3, 5, 1], A(84, 84, 76, 85, 40, 76), { price: 20000 }),
+  palmer: P('palmer', 'Cole Palmer', 'RW', 10, [0, 2, 0], A(80, 88, 89, 90, 48, 66), { price: 30000 }),
+  hazard: P('hazard', 'Eden Hazard', 'LW', 10, [1, 1, 0], A(92, 86, 88, 96, 40, 72), { price: 50000, icon: true }),
 };
 
+// money is no object
+export const INFINITE_COINS = true;
+
 export const SHOP = ['petrov', 'kowal', 'nakamura', 'kessler', 'ijeoma', 'rocha', 'diallo', 'vandrecht', 'sorensen', 'abernathy',
-  'benedetti', 'lavelle', 'osei', 'ferreira', 'hallstrom', 'okoro', 'maestro'];
+  'benedetti', 'lavelle', 'osei', 'ferreira', 'hallstrom', 'okoro', 'maestro',
+  'jpedro', 'palmer', 'pepe', 'acole', 'marcelo', 'vvd', 'ramos', 'rcarlos', 'drogba', 'hazard', 'maldini'];
 
 const START = ['zorlov', 'okafor', 'brennan', 'halvorsen', 'tanaka', 'duarte', 'mbeki', 'vexley', 'silver', 'ronaldo', 'lindqvist'];
 const START_OWNED = [...START, 'kairo', 'zorp'];
@@ -69,6 +85,9 @@ export function profile() {
   if (prof) return prof;
   try { prof = JSON.parse(localStorage.getItem(KEY)); } catch (_) { prof = null; }
   if (!prof || prof.v !== 1) prof = fresh();
+  prof.custom = prof.custom || {};
+  prof.edits = prof.edits || {};
+  applyEditor(prof);
   // keep the superstars in the club even on old saves
   for (const id of START_OWNED) if (!prof.owned.includes(id)) prof.owned.push(id);
   prof.lineup = prof.lineup.filter(id => DB[id]);
@@ -104,6 +123,7 @@ export function ovr(id) {
 }
 export function tier(id) {
   const p = DB[id], o = ovr(id);
+  if (p.card) return p.card;
   if (p.star) return 'star';
   if (p.icon) return 'icon';
   return o >= 88 ? 'rare' : o >= 75 ? 'gold' : o >= 65 ? 'silver' : 'bronze';
@@ -166,8 +186,8 @@ export function canTrain(id, k) { return attrLevel(id, k) < MAX_LEVEL && attrs(i
 export function train(id, k) {
   const pr = profile();
   const cost = trainCost(id, k);
-  if (!canTrain(id, k) || pr.coins < cost) return false;
-  pr.coins -= cost;
+  if (!canTrain(id, k) || (!INFINITE_COINS && pr.coins < cost)) return false;
+  if (!INFINITE_COINS) pr.coins -= cost;
   const u = ups(id);
   u[k] = (u[k] || 0) + 1;
   pr.upgrades[id] = u;
@@ -177,8 +197,8 @@ export function train(id, k) {
 
 export function buy(id) {
   const pr = profile(), p = DB[id];
-  if (!p || !p.price || pr.owned.includes(id) || pr.coins < p.price) return false;
-  pr.coins -= p.price;
+  if (!p || !p.price || pr.owned.includes(id) || (!INFINITE_COINS && pr.coins < p.price)) return false;
+  if (!INFINITE_COINS) pr.coins -= p.price;
   pr.owned.push(id);
   save();
   return true;
@@ -211,4 +231,64 @@ export function matchRewards(home, away, difficulty, oppOvr = 84) {
   pr.record[res]++;
   save();
   return { lines, total, mult };
+}
+
+// ---------------------------------------------------------------- player editor
+// Your own players (profile.custom) and edits to existing ones (profile.edits), saved on the device.
+export const POSITIONS = ['GK', 'LB', 'CB', 'RB', 'DM', 'CM', 'LW', 'RW', 'ST'];
+export const CARDS = ['bronze', 'silver', 'gold', 'rare', 'icon', 'star', 'toty', 'ruby', 'emerald', 'black'];
+const ORIG = {};
+function applyEditor(pr) {
+  for (const [id, p] of Object.entries(pr.custom)) DB[id] = p;
+  for (const [id, e] of Object.entries(pr.edits)) {
+    if (!DB[id]) continue;
+    if (!ORIG[id]) ORIG[id] = JSON.parse(JSON.stringify(DB[id]));
+    Object.assign(DB[id], e, { a: { ...ORIG[id].a, ...(e.a || {}) } });
+  }
+}
+const clampN = (v, a, b, d) => { v = Math.round(Number(v)); return Number.isFinite(v) ? Math.max(a, Math.min(b, v)) : d; };
+function clean(d) {
+  const a = {};
+  for (const k of ['pac', 'sho', 'pas', 'dri', 'def', 'phy', 'gk']) a[k] = clampN(d.a && d.a[k], 1, 99, 50);
+  return {
+    name: String(d.name || 'New Player').trim().slice(0, 22) || 'New Player',
+    pos: POSITIONS.includes(d.pos) ? d.pos : 'ST',
+    num: clampN(d.num, 1, 99, 9),
+    skin: clampN(d.skin, 0, 5, 0), hair: clampN(d.hair, 0, 5, 0), style: clampN(d.style, 0, 5, 0),
+    a, base: clampN(d.base, 0, 99, 0) || null,
+    card: CARDS.includes(d.card) ? d.card : null,
+  };
+}
+export const isCustom = id => !!profile().custom[id];
+export const isEdited = id => !!profile().edits[id];
+// create (id = null) or edit a player; returns the id
+export function savePlayer(id, data) {
+  const pr = profile(), c = clean(data);
+  if (!id || pr.custom[id]) {
+    id = id || 'c' + Date.now().toString(36);
+    pr.custom[id] = { id, ...c, star: false };
+    DB[id] = pr.custom[id];
+    if (!pr.owned.includes(id)) pr.owned.push(id);
+  } else {
+    if (!DB[id]) return null;
+    if (!ORIG[id]) ORIG[id] = JSON.parse(JSON.stringify(DB[id]));
+    pr.edits[id] = c;
+    Object.assign(DB[id], c);
+  }
+  save();
+  return id;
+}
+// undo edits to a built-in player, or delete one of your own (not while he's in the starting XI)
+export function removePlayer(id) {
+  const pr = profile();
+  if (pr.custom[id]) {
+    if (pr.lineup.includes(id)) return false;
+    delete pr.custom[id]; delete DB[id];
+    pr.owned = pr.owned.filter(x => x !== id);
+  } else if (pr.edits[id]) {
+    delete pr.edits[id];
+    if (ORIG[id]) { DB[id] = ORIG[id]; delete ORIG[id]; }
+  } else return false;
+  save();
+  return true;
 }

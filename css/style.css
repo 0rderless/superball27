@@ -685,3 +685,34 @@ button:active { transform: scale(.97); }
 #page-play .q-row .seg button { padding: 4px 2px; font-size: 12px; }
 .tc-card .pcard { font-size: 9px; }
 @media (max-height: 430px) { .tc-card .pcard { font-size: 7.4px; } }
+
+/* ---------- extra card colours (editor) ---------- */
+.t-toty { --bg1: #2b6dff; --bg2: #061a5c; --fg: #ffe27a; }
+.t-ruby { --bg1: #ff3b55; --bg2: #5c0414; --fg: #fff3e0; }
+.t-emerald { --bg1: #22d68a; --bg2: #04452a; --fg: #f2fff8; }
+.t-black { --bg1: #3a3d46; --bg2: #0a0b0e; --fg: #f4f4f4; }
+
+/* ---------- player editor ---------- */
+.editor-btn { margin-left: auto; margin-right: 6px; }
+.editor-card { width: min(920px, 94vw); max-height: 92vh; display: flex; flex-direction: column; }
+.ed-body { display: flex; gap: 16px; min-height: 0; flex: 1; overflow: hidden; }
+.ed-left { flex: none; width: 190px; display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.ed-left select { width: 100%; padding: 8px; border-radius: 6px; background: var(--glass-2); color: var(--text); border: 1px solid var(--line-2); font: 600 13px var(--ui); }
+.ed-preview { display: grid; place-items: center; flex: 1; min-height: 0; }
+.ed-preview .pcard { font-size: 10px; }
+.ed-actions { display: flex; gap: 8px; }
+.ed-actions .mbtn { flex: 1; }
+.ed-form { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; padding-right: 6px; touch-action: pan-y; }
+.ed-row { display: flex; align-items: center; gap: 10px; }
+.ed-row > span { flex: none; width: 92px; color: var(--muted); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+.ed-row input { flex: 1; min-width: 0; user-select: text; -webkit-user-select: text; touch-action: auto; }
+.ed-row input:not([type=range]) { padding: 7px 9px; border-radius: 6px; background: var(--glass-2); color: var(--text); border: 1px solid var(--line-2); font: 600 14px var(--ui); }
+.ed-row input[type=range] { accent-color: var(--cyan); }
+.ed-stat b { width: 34px; text-align: right; font-family: var(--display); font-size: 18px; }
+.ed-chips { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
+.chip { padding: 5px 9px; border-radius: 5px; font-weight: 700; font-size: 12px; background: var(--glass-2); border: 1px solid var(--line); color: var(--text); }
+.chip.on { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.card-chip { background: linear-gradient(165deg, var(--bg1), var(--bg2)); color: var(--fg); border: 0; }
+.sw { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); }
+.sw.on { outline: 3px solid var(--cyan); outline-offset: 2px; }
+@media (max-height: 430px) { .ed-left { width: 150px; } .ed-preview .pcard { font-size: 8px; } .ed-form { gap: 4px; } }

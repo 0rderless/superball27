@@ -143,6 +143,7 @@
     <main class="page hidden" id="page-shop">
       <div class="shop-bar">
         <div class="seg shop-filter" id="shop-filter"></div>
+        <button class="daily editor-btn" id="editor-btn"><svg class="ico"><use href="#i-sliders"/></svg><span>Editor</span></button>
         <button class="daily" id="daily-btn"><svg class="ico"><use href="#i-gift"/></svg><span id="daily-txt">Daily reward</span></button>
       </div>
       <div class="shop-grid" id="shop-grid"></div>
@@ -259,6 +260,20 @@
   </div>
 
   <!-- ============ CONTROLS GUIDE ============ -->
+  <div id="editor" class="modal hidden">
+    <div class="modal-card editor-card">
+      <div class="modal-head"><h2>PLAYER EDITOR</h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
+      <div class="ed-body">
+        <div class="ed-left">
+          <select id="ed-pick"></select>
+          <div class="ed-preview" id="ed-preview"></div>
+          <div class="ed-actions"><button class="mbtn primary" id="ed-save">Save</button><button class="mbtn" id="ed-remove">Reset</button></div>
+        </div>
+        <div class="ed-form" id="ed-form"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="help" class="modal hidden">
     <div class="modal-card">
       <div class="modal-head"><h2>CONTROLS</h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>

@@ -32,7 +32,7 @@ export function avatar(p, shirt = '#1557ff', trim = '#ffffff') {
   </svg>`;
 }
 
-const rowsFor = (pos, a) => pos === 'GK'
+export const rowsFor = (pos, a) => pos === 'GK'
   ? [['DIV', a.gk], ['HAN', Math.max(1, a.gk - 3)], ['KIC', a.pas], ['REF', Math.min(99, a.gk + 2)], ['SPD', a.pac], ['POS', Math.max(1, a.gk - 1)]]
   : [['PAC', a.pac], ['SHO', a.sho], ['PAS', a.pas], ['DRI', a.dri], ['DEF', a.def], ['PHY', a.phy]];
 
