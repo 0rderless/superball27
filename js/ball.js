@@ -54,6 +54,20 @@ function ballTexture() {
   return t;
 }
 
+// One step of flight through the air: gravity, drag and Magnus curl from side spin.
+// Changes v in place and returns the decayed spin (the caller moves the ball).
+export function airStep(v, spin, dt) {
+  v.y -= GRAVITY * dt;
+  v.multiplyScalar(Math.max(0, 1 - 0.0075 * v.length() * dt));
+  if (spin !== 0) {
+    // magnus curl: lateral acceleration perpendicular to horizontal velocity
+    const hx = v.x, hz = v.z, k = spin * 0.045 * dt;
+    v.x += -hz * k;
+    v.z += hx * k;
+  }
+  return spin * Math.max(0, 1 - 0.6 * dt);
+}
+
 export class Ball {
   constructor(scene, shadows) {
     this.pos = new THREE.Vector3(0, BALL_R, 0);
@@ -96,18 +110,7 @@ export class Ball {
     const v = this.vel, p = this.pos;
     const onGround = p.y <= BALL_R + 0.005 && Math.abs(v.y) < 0.6;
     if (!onGround) {
-      v.y -= GRAVITY * dt;
-      const sp = v.length();
-      const drag = 0.0075 * sp * dt;
-      v.multiplyScalar(Math.max(0, 1 - drag));
-      // magnus curl: lateral acceleration perpendicular to horizontal velocity
-      if (this.spin !== 0) {
-        const hx = v.x, hz = v.z;
-        const k = this.spin * 0.045 * dt;
-        v.x += -hz * k;
-        v.z += hx * k;
-      }
-      this.spin *= Math.max(0, 1 - 0.6 * dt);
+      this.spin = airStep(v, this.spin, dt);
     } else {
       v.y = 0;
       p.y = BALL_R;

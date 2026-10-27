@@ -743,3 +743,9 @@ input, select, textarea { font-size: 16px !important; -webkit-user-select: text;
 .ed-row input[type=color] { flex: none; width: 46px; height: 32px; padding: 0 2px; border-radius: 6px; background: var(--glass-2); border: 1px solid var(--line-2); }
 .kit-colours { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 12px; }
 .kit-colours .ed-row > span { width: 78px; }
+/* referee cards */
+#banner.card-yellow .b1, #banner.card-red .b1 { font-size: clamp(34px, 11vh, 80px); }
+#banner.card-yellow .b1::before, #banner.card-red .b1::before { content: ''; display: inline-block; width: .5em; height: .7em; margin-right: .3em; border-radius: .06em; vertical-align: -.05em; transform: rotate(8deg); box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+#banner.card-yellow .b1::before { background: #ffd21f; }
+#banner.card-red .b1::before { background: #e3102c; }
+#banner.card-red .b2 { background: #b30d24; }

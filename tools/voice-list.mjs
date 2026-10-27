@@ -11,10 +11,11 @@ const { DB } = await import('../js/squad.js');
 
 const clips = [], manifest = {};
 const slug = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48);
-let n = 0;
+// file names come from the line itself, so adding lines never renames (or re-records) the others
+const hash = s => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.codePointAt(0), 16777619); return (h >>> 0).toString(36).slice(0, 5); };
 function add(key, voice, text, mood) {
   if (manifest[key]) return;
-  const file = `${voice === 'co' ? 'c' : 'l'}${(n++).toString(36)}_${slug(text)}.mp3`;
+  const file = `${voice === 'co' ? 'c' : 'l'}_${slug(text)}_${hash(key + mood)}.mp3`;
   manifest[key] = file;
   clips.push({ file, voice, text, mood });
 }

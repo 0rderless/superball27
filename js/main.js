@@ -15,7 +15,7 @@ import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 25; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 26; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 // cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
 const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
@@ -117,7 +117,7 @@ const ui = {
   power: $('power'), powerFill: $('power').firstElementChild, controls: $('controls'), hud: $('hud'),
 };
 const rctx = ui.radar.getContext('2d');
-let camSnap = false;
+let camSnap = false, spCam = false;
 let bannerTimer = 0, eventTimer = 0;
 const vibrate = p => { if (settings.vibration && navigator.vibrate) try { navigator.vibrate(p); } catch (_) { /* ignore */ } };
 
@@ -1078,6 +1078,16 @@ function updateCamera(dt) {
     camSnap = false;
     return;
   }
+  if (match.setPieceView(camDesired, focusV)) {
+    if (camSnap || !spCam) { camera.position.copy(camDesired); camLook.copy(focusV); }
+    spCam = true;
+    camera.position.lerp(camDesired, 1 - Math.exp(-dt * 4));
+    camLook.lerp(focusV, 1 - Math.exp(-dt * 6));
+    camera.lookAt(camLook);
+    camSnap = false;
+    return;
+  }
+  if (spCam) { spCam = false; camSnap = true; }
   match.focus(focusV);
   if (c.pro) { proCamera(dt, c); return; }
   // look ahead in the direction of play, like a TV director

@@ -46,7 +46,8 @@ const BOT = `
     } else { stallT = 0; lastBall = null; }
   }
   const m = S.match;
-  window.__r = { score: [m.home.score, m.away.score], shots: [m.stats.home.shots, m.stats.away.shots], maxStall: +maxStall.toFixed(1), ends };
+  window.__r = { score: [m.home.score, m.away.score], shots: [m.stats.home.shots, m.stats.away.shots], maxStall: +maxStall.toFixed(1), ends,
+    fouls: [m.stats.home.fouls, m.stats.away.fouls], cards: [m.stats.home.yellows + m.stats.away.yellows, m.stats.home.reds + m.stats.away.reds], players: m.players.length };
 `;
 
 const res = [];
@@ -59,6 +60,8 @@ for (const difficulty of ['amateur', 'pro', 'legend']) {
   check(res, `${difficulty}: no page errors`, page.errors.length === 0, page.errors.slice(0, 3));
   check(res, `${difficulty}: no stall > 6s`, r.maxStall <= 6, r.maxStall);
   check(res, `${difficulty}: no self-loss (< 2% of possessions)`, r.ends.selfLoss + r.ends.released <= total * 0.02, { ...r.ends, score: r.score, shots: r.shots });
+  console.log(`     ${difficulty}: score ${r.score} · fouls ${r.fouls} · yellows/reds ${r.cards} · players ${r.players}`);
+  check(res, `${difficulty}: fouls happen but don't wreck the game (≤ 14 in 7 minutes)`, r.fouls[0] + r.fouls[1] <= 14, r.fouls);
   if (last) await last.close();
   last = browser; last.page = page;
 }

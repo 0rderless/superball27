@@ -27,6 +27,12 @@ export const LEAD = {
   fullTimeLose: [['Full time.', '{t} take the win.'], ["It's over. A night to forget for ZorpFC.", '@sc']],
   fullTimeDraw: [['Full time, and the points are shared.', '@sc'], ['All square at the final whistle.']],
   replay: [["Let's see that again."], ["Here's the replay."], ['Have another look at this.']],
+  foul: [['Foul.'], ['The referee blows for a foul.'], ["That's a foul by", '@n.']],
+  yellow: [['Yellow card for', '@n.'], ['@n', 'goes into the book.'], ["That's a booking."]],
+  red: [['Red card!', '@n!'], ["He's been sent off!"], ['Off he goes!', '@n', 'is sent off!']],
+  advantage: [['The referee plays advantage.'], ['Advantage. Play on.']],
+  freekick: [['Free kick, in a dangerous position.'], ['@n', 'stands over this one.'], ['Free kick. This is within range.']],
+  penalty: [['PENALTY!'], ["It's a penalty!", '@n', 'to take it.'], ['The referee points to the spot!']],
 };
 
 // the co-commentator's reaction a moment later (not every time)
@@ -38,8 +44,12 @@ export const CO = {
   post: [['The width of the post away from a goal!'], ['Unlucky. That deserved to go in.']],
   skill: [["The defender just didn't know where he was!"], ['You pay to watch players like that.']],
   tackle: [['Perfectly timed. Got the ball, nothing else.']],
+  foul: [['Clumsy challenge, that.'], ['He never got near the ball.']],
+  yellow: [['No complaints. He had to stop him.'], ['Cynical. He knew exactly what he was doing.']],
+  red: [["You can't do that. He's left his team with ten men."], ['Reckless. The referee had no choice.']],
+  penalty: [['Stonewall penalty. He clipped his heels.'], ["He's gone straight through the back of him."]],
 };
-export const CO_CHANCE = { goalHome: 0.8, goalAway: 0.6, save: 0.4, miss: 0.35, post: 0.6, skill: 0.25, tackle: 0.15, ownGoal: 0.6 };
+export const CO_CHANCE = { goalHome: 0.8, goalAway: 0.6, save: 0.4, miss: 0.35, post: 0.6, skill: 0.25, tackle: 0.15, ownGoal: 0.6, foul: 0.3, yellow: 0.5, red: 0.8, penalty: 0.7 };
 
 const NUM = ['nil', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 // spoken score line, from ZorpFC's point of view
