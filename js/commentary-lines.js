@@ -32,6 +32,7 @@ export const LEAD = {
   red: [['Red card!', '@n!'], ["He's been sent off!"], ['Off he goes!', '@n', 'is sent off!']],
   advantage: [['The referee plays advantage.'], ['Advantage. Play on.']],
   freekick: [['Free kick, in a dangerous position.'], ['@n', 'stands over this one.'], ['Free kick. This is within range.']],
+  offside: [['Offside!'], ['The flag is up. Offside.'], ['@n', 'strayed offside.']],
   penalty: [['PENALTY!'], ["It's a penalty!", '@n', 'to take it.'], ['The referee points to the spot!']],
 };
 
@@ -47,9 +48,10 @@ export const CO = {
   foul: [['Clumsy challenge, that.'], ['He never got near the ball.']],
   yellow: [['No complaints. He had to stop him.'], ['Cynical. He knew exactly what he was doing.']],
   red: [["You can't do that. He's left his team with ten men."], ['Reckless. The referee had no choice.']],
+  offside: [['He has to hold his run there.'], ['Good defending. They stepped up together.']],
   penalty: [['Stonewall penalty. He clipped his heels.'], ["He's gone straight through the back of him."]],
 };
-export const CO_CHANCE = { goalHome: 0.8, goalAway: 0.6, save: 0.4, miss: 0.35, post: 0.6, skill: 0.25, tackle: 0.15, ownGoal: 0.6, foul: 0.3, yellow: 0.5, red: 0.8, penalty: 0.7 };
+export const CO_CHANCE = { goalHome: 0.8, goalAway: 0.6, save: 0.4, miss: 0.35, post: 0.6, skill: 0.25, tackle: 0.15, ownGoal: 0.6, foul: 0.3, yellow: 0.5, red: 0.8, penalty: 0.7, offside: 0.3 };
 
 const NUM = ['nil', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 // spoken score line, from ZorpFC's point of view

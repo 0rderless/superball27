@@ -15,7 +15,7 @@ import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 26; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 27; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 // cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
 const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
@@ -33,7 +33,7 @@ const weakDevice = (navigator.hardwareConcurrency || 4) <= 4 && /Android/i.test(
 const legacyAssist = store.get('assist', 'on') !== 'off';
 const DEFAULTS = {
   difficulty: 'pro', minutes: 6, camera: 'broadcast', camZoom: 100, graphics: weakDevice ? 'low' : 'high',
-  passAssist: legacyAssist, autoSwitch: legacyAssist, autoSprint: true, defAssist: true, dribAssist: true,
+  passAssist: legacyAssist, autoSwitch: legacyAssist, autoSprint: true, defAssist: true, dribAssist: true, offside: true,
   volume: 90, crowd: 100, sound: true, commentary: true,
   radar: true, fps: false, btnSize: 1, vibration: true, joyFixed: false,
 };
@@ -881,6 +881,7 @@ const SCHEMA = [
   { tab: 'Gameplay', key: 'autoSwitch', label: 'Auto switch', desc: 'Control the closest defender automatically', type: 'toggle' },
   { tab: 'Gameplay', key: 'autoSprint', label: 'Auto sprint', desc: 'Push the joystick to the edge to sprint', type: 'toggle' },
   { tab: 'Gameplay', key: 'dribAssist', label: 'Dribble assist', desc: 'Closer ball control and quicker turns for your players', type: 'toggle' },
+  { tab: 'Gameplay', key: 'offside', label: 'Offside', desc: 'The linesman flags runners caught beyond the last defender', type: 'toggle' },
   { tab: 'Gameplay', key: 'defAssist', label: 'Defence assist', desc: 'Hold SPRINT (no stick) to press and contain the man on the ball', type: 'toggle' },
   { tab: 'Camera', key: 'camera', type: 'cams' },
   { tab: 'Camera', key: 'camZoom', label: 'Camera distance', desc: 'Closer or further than the preset', type: 'range', min: 80, max: 125, step: 5, unit: '%' },

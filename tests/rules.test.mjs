@@ -47,3 +47,22 @@ test('DOGSO: last man, through on goal, in range', () => {
   assert.equal(isDogso({ spot: att, attackX, defendersBetween: 1 }), false);
   assert.equal(isDogso({ spot: { x: 5, z: 0 }, attackX, defendersBetween: 0 }), false);
 });
+
+import { secondLastX, offsidePosition } from '../js/rules.js';
+
+test('second-last defender: the keeper usually counts as the last', () => {
+  // defending the goal at +52.5: deepest is the keeper at 51, then a CB at 30
+  assert.equal(secondLastX([51, 30, 20, 10], 1), 30);
+  // defending the goal at -52.5 (attack dir -1)
+  assert.equal(secondLastX([-51, -28, -5], -1), -28);
+});
+
+test('offside position: in their half, ahead of the ball and of the second-last defender', () => {
+  const base = { ballX: 10, line: 30, dir: 1 };
+  assert.equal(offsidePosition({ ...base, x: 32 }), true);
+  assert.equal(offsidePosition({ ...base, x: 30 }), false, 'level is onside');
+  assert.equal(offsidePosition({ ...base, x: 28 }), false);
+  assert.equal(offsidePosition({ x: -5, ballX: -20, line: -10, dir: 1 }), false, 'own half is never offside');
+  assert.equal(offsidePosition({ x: 32, ballX: 33, line: 30, dir: 1 }), false, 'behind the ball is onside');
+  assert.equal(offsidePosition({ x: -32, ballX: -10, line: -30, dir: -1 }), true);
+});

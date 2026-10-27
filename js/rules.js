@@ -46,3 +46,15 @@ export function wallSpots(ball, attackX, n) {
   }
   return out;
 }
+
+// x of the second-last defender of the goal the attackers (direction dir) are attacking
+export function secondLastX(defXs, dir) {
+  const s = [...defXs].sort((a, b) => (b - a) * dir);
+  return s.length > 1 ? s[1] : s.length ? s[0] : 0;
+}
+
+// at the moment a team-mate plays the ball: in the opponents' half, ahead of the ball and of the
+// second-last defender (level is onside). A small margin keeps the very tight ones onside.
+export function offsidePosition({ x, ballX, line, dir, margin = 0.15 }) {
+  return x * dir > 0 && (x - ballX) * dir > 0 && (x - line) * dir > margin;
+}

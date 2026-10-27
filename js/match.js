@@ -3,7 +3,7 @@ import { F, BALL_R, GRAVITY, FORMATIONS, FORMATION, kickoffShape, DIFFICULTY, TE
 import { createPlayerModel, animateModel, disposePlayerModel } from './model.js';
 import { Ball } from './ball.js';
 import { advanceGait, slotDistance, planTouch, ROLL_DECEL, FOOT_REACH, exposure, tackleOutcome } from './dribble.js';
-import { foulChance, fromBehind, cardFor, restartForFoul, wallSpots, isDogso } from './rules.js';
+import { foulChance, fromBehind, cardFor, restartForFoul, wallSpots, isDogso, secondLastX, offsidePosition } from './rules.js';
 import { aimCurl, fly } from './setpiece.js';
 
 const V3 = THREE.Vector3;
@@ -763,6 +763,13 @@ export class Match {
 
   // Pass assist: pick the teammate the player most likely means, favouring open,
   // unblocked options inside a generous cone around the aim direction.
+  // would this team-mate be offside if the ball were played now?
+  wouldBeOffside(p, m) {
+    if (this.settings.offside === false) return false;
+    const dir = p.team.dir;
+    return offsidePosition({ x: m.pos.x, ballX: this.ball.pos.x, line: secondLastX(p.team.opp.players.map(q => q.pos.x), dir), dir });
+  }
+
   passTarget(p, aim, type) {
     const team = p.team;
     const assist = team.isUser && this.settings.passAssist !== false;
@@ -784,6 +791,7 @@ export class Match {
         if (type === 'through' && FORWARDS.has(m.role)) sc -= 0.3;
       } else sc = ang * 2.2 + d * 0.02 + this.laneRisk(p.pos, m.pos, team.opp) * 0.5;
       if (m.isGK) sc += 1.5;
+      if (this.wouldBeOffside(p, m)) sc += assist ? 0.45 : 0.15; // assist steers it to an onside man when there's one close by
       if (sc < bestScore) { bestScore = sc; best = m; }
     }
     if (!best && assist) {
@@ -967,6 +975,10 @@ export class Match {
     this.lastTouch = p;
     this.kickId++;
     this.lastKick = { kind: k.kind, team: p.team, id: this.kickId, by: p, setpiece: !!k.setpiece };
+    // no offside from a throw-in, goal kick or corner
+    if (k.kind === 'throw' || this.restartKick === 'goalkick' || this.restartKick === 'corner') this.offside = null;
+    else this.offsideSnapshot(p);
+    this.restartKick = null;
     if (k.setpiece) for (const q of p.team.opp.players) if (q.wall) q.a.headerT = 0; // the wall jumps
     this.guarantee = k.guarantee ? { to: k.guarantee, id: this.kickId, t: 0 } : null;
     this.sound.kick(k.power);
@@ -1169,6 +1181,7 @@ export class Match {
   // ---------------------------------------------------------------- ball
   gainBall(p, hands, silent = false) {
     const ball = this.ball;
+    if (this.offsideTouch(p)) return;
     ball.owner = p;
     ball.held = !!hands;
     p.drib = null; // first touch is worked out from the incoming ball (see dribble)
@@ -1672,6 +1685,7 @@ export class Match {
 
   header(p) {
     const ball = this.ball, team = p.team;
+    if (this.offsideTouch(p)) return;
     p.a.headerT = 0;
     p.action = 'header';
     p.busy = 0.5;
@@ -1713,6 +1727,7 @@ export class Match {
     ball.spin = 0;
     this.kickId++;
     this.lastKick = { kind, team, id: this.kickId, by: p, header: true };
+    this.offsideSnapshot(p);
     this.guarantee = null;
     this.sound.kick(0.4);
   }
@@ -1783,8 +1798,9 @@ export class Match {
     if (this.half === 2 && this.clock === 0) this.say('secondHalf', {}, 2);
   }
 
-  startRestart(type, team, spot) {
+  startRestart(type, team, spot, opts = {}) {
     const ball = this.ball;
+    this.offside = null;
     this.phase = 'restart';
     this.phaseT = 0;
     ball.owner = null;
@@ -1793,7 +1809,7 @@ export class Match {
     for (const p of this.players) { p.recv = null; p.pending = null; p.charging = false; p.cornerSpot = null; p.wall = false; }
     this.adv = null;
     const toGoal = Math.hypot(team.attackX - spot.x, spot.z);
-    const shooting = type === 'penalty' || (type === 'freekick' && toGoal < 33 && Math.abs(spot.z) < 24);
+    const shooting = type === 'penalty' || (type === 'freekick' && !opts.indirect && toGoal < 33 && Math.abs(spot.z) < 24);
     let taker;
     if (type === 'goalkick') taker = team.gk;
     else if (shooting) taker = team.players.filter(q => !q.isGK).sort((a, b) => b.st.sho - a.st.sho)[0]; // the dead-ball specialist
@@ -1812,7 +1828,7 @@ export class Match {
     const r = { type, team, taker, spot: spot.clone(), aim, wait: 0, ready: false, shooting };
     this.restart = r;
     this.possTeam = team;
-    const labels = { throw: 'THROW-IN', corner: 'CORNER', goalkick: 'GOAL KICK', freekick: 'FREE KICK', penalty: 'PENALTY!' };
+    const labels = { throw: 'THROW-IN', corner: 'CORNER', goalkick: 'GOAL KICK', freekick: opts.indirect ? '' : 'FREE KICK', penalty: 'PENALTY!' };
     this.hooks.fade(() => {
       ball.pos.copy(spot);
       ball.pos.y = BALL_R;
@@ -1853,6 +1869,36 @@ export class Match {
     if (type === 'corner') this.say('corner', {}, 1);
     if (type === 'freekick' && shooting) this.say('freekick', { n: taker.name }, 2);
     if (type === 'penalty') this.say('penalty', { n: taker.name }, 3);
+  }
+
+  // ---------------------------------------------------------------- offside
+  // when a player plays the ball, note which team-mates are in an offside position
+  offsideSnapshot(p) {
+    this.offside = null;
+    if (this.settings.offside === false || this.phase !== 'play') return;
+    const team = p.team, dir = team.dir, bx = this.ball.pos.x;
+    const line = secondLastX(team.opp.players.map(q => q.pos.x), dir);
+    const set = new Set();
+    for (const q of team.players) if (q !== p && offsidePosition({ x: q.pos.x, ballX: bx, line, dir })) set.add(q);
+    if (set.size) this.offside = { team, set, line };
+  }
+
+  // a player touching the ball: offside if he was in an offside position when it was played.
+  // Anyone else playing it (not a save or a block) starts a new phase.
+  offsideTouch(p) {
+    const o = this.offside;
+    if (!o || this.phase !== 'play') return false;
+    this.offside = null;
+    if (o.team !== p.team || !o.set.has(p)) return false;
+    const spot = p.pos.clone().setY(BALL_R);
+    spot.x = clamp(spot.x, -HL + 1, HL - 1); spot.z = clamp(spot.z, -HW + 1, HW - 1);
+    this.ball.owner = null;
+    this.sound.whistle(1);
+    this.hooks.event('OFFSIDE');
+    this.say('offside', { n: p.name }, 2);
+    this.stats[p.team.key].offsides = (this.stats[p.team.key].offsides || 0) + 1;
+    this.startRestart('freekick', p.team.opp, spot, { indirect: true });
+    return true;
   }
 
   // ---------------------------------------------------------------- fouls, cards, advantage
@@ -2091,6 +2137,7 @@ export class Match {
     this.phase = 'play';
     this.phaseT = 0;
     this.hooks.hint('');
+    this.restartKick = r.type;
     p.a.throwReady = false;
     if (this.ball.owner !== p) this.ball.owner = p;
     if (kind === 'setpiece') return;
@@ -2415,6 +2462,7 @@ export class Match {
       let sc = prog * (prog < 0 && a0 > 0.6 ? 3.6 : 2.6) + clamp(open / 7, 0, 1) * 0.9 - lane * care - (lane > 0.7 ? care * 0.5 : 0) - (d > 30 ? 0.25 : 0) + 0.1;
       if (safe) sc = -lane * 2 + clamp(open / 7, 0, 1) - d * 0.01;
       if (Math.abs(m.pos.x - team.attackX) < 18 && Math.abs(m.pos.z) < 18) sc += a0 > 0.8 ? 0.6 : 0.25;
+      if (this.wouldBeOffside(p, m)) sc -= 2.5 * this.diff.press + 0.5; // good sides spot the flag
       if (sc > bs) { bs = sc; best = { m, sc, type: 'ground', target: m.pos.clone() }; }
       if (!safe && (FORWARDS.has(m.role) || ATT_MIDS.has(m.role)) && prog > -0.05) {
         const tp = m.pos.clone().add(new V3(team.dir * 8, 0, -m.pos.z * 0.1));
@@ -2422,6 +2470,7 @@ export class Match {
           const free = this.nearestOpp(m, tp).d > hdist(m.pos, tp) * 0.9;
           if (free) {
             const sc2 = (team.along(tp) - a0) * 2.6 + 0.5 - this.laneRisk(p.pos, tp, team.opp) * (1.3 + Math.max(0, this.diff.press - 0.6) * 2);
+            if (this.wouldBeOffside(p, m)) continue;
             if (sc2 > bs) { bs = sc2; best = { m, sc: sc2, type: 'through', target: tp }; }
           }
         }
