@@ -252,8 +252,8 @@ svg { display: block; }
 }
 .sb-team { display: flex; align-items: center; gap: 6px; padding: 0 9px; }
 .sb-team i { width: 5px; height: 18px; border-radius: 3px; }
-.sb-home i { background: var(--home); box-shadow: 0 0 8px var(--home); }
-.sb-away i { background: var(--away); box-shadow: 0 0 8px var(--away); }
+.sb-home i { background: var(--home); color: var(--home); box-shadow: 0 0 8px currentColor; }
+.sb-away i { background: var(--away); color: var(--away); box-shadow: 0 0 8px currentColor; }
 .sb-score { display: flex; align-items: center; gap: 7px; padding: 0 10px; background: linear-gradient(180deg, #fff, #dfe6f5); color: #08102a; font-size: 17px; }
 .sb-score b { width: 7px; height: 3px; background: #08102a55; border-radius: 2px; }
 #clock { display: flex; align-items: center; padding: 0 10px; background: linear-gradient(180deg, #2a6bff, #1c4fd6); font-family: var(--ui); font-weight: 700; font-size: 16px; min-width: 62px; justify-content: center; }
@@ -734,3 +734,12 @@ button:active { transform: scale(.97); }
 .bench .bench-card { flex: none; }
 /* text boxes: iPhone zooms the page into any field under 16px, and needs text selection allowed */
 input, select, textarea { font-size: 16px !important; -webkit-user-select: text; user-select: text; touch-action: manipulation; }
+/* kits */
+.kits-btn { flex: none; margin-left: auto; align-self: center; display: flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 11px; background: var(--glass); border: 1px solid var(--line); color: var(--text); font-weight: 800; font-size: 12px; }
+.kits-btn .ico { width: 16px; height: 16px; }
+.kit-preview { overflow: hidden; }
+.kit-preview svg { height: 100%; max-height: 190px; width: auto; max-width: 100%; filter: drop-shadow(0 6px 14px rgba(0,0,0,.4)); }
+#kit-slots { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.ed-row input[type=color] { flex: none; width: 46px; height: 32px; padding: 0 2px; border-radius: 6px; background: var(--glass-2); border: 1px solid var(--line-2); }
+.kit-colours { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 12px; }
+.kit-colours .ed-row > span { width: 78px; }

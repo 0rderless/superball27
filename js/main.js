@@ -9,12 +9,13 @@ import { F, DIFFICULTY, DIFF_KEYS, TEAMS, FORMATIONS } from './config.js';
 import { CLUBS, teamConfig, crestSVG, zorpCrestSVG } from './clubs.js';
 import * as SQ from './squad.js';
 import { startCloud } from './cloud.js';
+import { chooseKits, PATTERNS, KIT_SLOTS } from './kits.js';
 import { card, clubCard, avatar, cardView, rowsFor } from './cards.js';
 import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 24; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 25; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 // cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
 const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
@@ -172,12 +173,20 @@ let state = 'boot'; // boot | title | menu | prematch | intro | game | paused | 
 let introT = 0;
 let assetsReady = false;
 
+// match kits: yours (chosen or auto) and theirs, never clashing
+function pickKits() {
+  const mk = chooseKits({ kits: SQ.kits(), choice: SQ.profile().kitChoice, club: opponent });
+  TEAMS.home.kit = mk.home;
+  TEAMS.home.gkKit = SQ.kits().gk;
+  TEAMS.home.color = mk.home.shirt;
+  TEAMS.away = teamConfig(opponent, mk.away);
+}
 function newMatch() {
   if (!assetsReady) return;
   if (match) match.dispose();
   TEAMS.home.players = SQ.lineupForMatch(); // your starting XI from Squad
   TEAMS.home.formation = SQ.formationName();
-  TEAMS.away = teamConfig(opponent);
+  pickKits();
   match = new Match(scene, sound, settings, hooks);
   match.diff = effDiff();
   syncOpponentUI();
@@ -201,8 +210,9 @@ function effDiff() {
 function syncOpponentUI() {
   const kitCol = TEAMS.away.kit.shirt;
   $('sb-away-name').textContent = opponent.short;
-  $('sb-away-col').style.background = opponent.color;
-  $('sb-away-col').style.color = opponent.color;
+  $('sb-away-col').style.background = kitCol;
+  $('sb-away-col').style.color = kitCol;
+  document.querySelector('.sb-home i').style.cssText = `background:${TEAMS.home.kit.shirt};color:${TEAMS.home.kit.shirt}`;
   $('pp-a').textContent = opponent.short;
   $('pp-a').style.color = kitCol === '#f4f4f4' || kitCol === '#f2f2f2' ? '#e8e8e8' : opponent.color;
   $('pm-away-crest').innerHTML = crestSVG(opponent);
@@ -544,6 +554,53 @@ $('ed-remove').addEventListener('click', () => {
 });
 $('editor-btn').addEventListener('click', () => { edLoad(null); openModal('editor'); });
 
+// ---------------------------------------------------------------- kit editor
+const KIT_FIELDS = [['shirt', 'Shirt'], ['shirt2', 'Pattern'], ['trim', 'Trim'], ['number', 'Number'], ['shorts', 'Shorts'], ['socks', 'Socks'], ['sockTop', 'Sock tops'], ['boots', 'Boots']];
+const KIT_NAMES = { home: 'Home', away: 'Away', third: 'Third', gk: 'Keeper' };
+let kitSlot = 'home', kit = null;
+function kitSvg(k, num = 10) {
+  const id = 'kc' + Math.random().toString(36).slice(2, 7);
+  const pat = {
+    stripes: [0, 1, 2, 3, 4].map(i => `<rect x="${24 + i * 16}" y="0" width="8" height="90" fill="${k.shirt2}"/>`).join(''),
+    hoops: [0, 1, 2, 3, 4].map(i => `<rect x="0" y="${14 + i * 15}" width="120" height="7" fill="${k.shirt2}"/>`).join(''),
+    sash: `<path d="M18,0 L40,0 L104,90 L82,90 Z" fill="${k.shirt2}"/>`,
+    halves: `<rect x="60" y="0" width="60" height="90" fill="${k.shirt2}"/>`,
+  }[k.pattern] || '';
+  return `<svg viewBox="0 0 120 150" xmlns="http://www.w3.org/2000/svg">
+    <defs><clipPath id="${id}"><path d="M30,10 L48,4 Q60,12 72,4 L90,10 L112,32 L98,46 L90,40 L90,84 L30,84 L30,40 L22,46 L8,32 Z"/></clipPath></defs>
+    <g clip-path="url(#${id})"><rect width="120" height="90" fill="${k.shirt}"/>${pat}</g>
+    <path d="M48,4 Q60,14 72,4" fill="none" stroke="${k.trim}" stroke-width="4"/>
+    <path d="M8,32 L22,46 M112,32 L98,46" stroke="${k.trim}" stroke-width="4"/>
+    <text x="60" y="64" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="26" fill="${k.number}">${num}</text>
+    <path d="M30,84 L90,84 L92,114 L64,114 L60,102 L56,114 L28,114 Z" fill="${k.shorts}"/>
+    <rect x="34" y="117" width="16" height="24" rx="2" fill="${k.socks}"/><rect x="70" y="117" width="16" height="24" rx="2" fill="${k.socks}"/>
+    <rect x="34" y="117" width="16" height="5" fill="${k.sockTop}"/><rect x="70" y="117" width="16" height="5" fill="${k.sockTop}"/>
+    <rect x="31" y="141" width="21" height="7" rx="3" fill="${k.boots}"/><rect x="68" y="141" width="21" height="7" rx="3" fill="${k.boots}"/>
+  </svg>`;
+}
+function kitLoad(slot) {
+  kitSlot = slot;
+  kit = { ...SQ.kits()[slot] };
+  const choice = SQ.profile().kitChoice;
+  $('kit-slots').innerHTML = KIT_SLOTS.map(s => `<button class="chip ${s === slot ? 'on' : ''}" data-slot="${s}">${KIT_NAMES[s]}</button>`).join('');
+  $('kit-form').innerHTML = `
+    <div class="ed-row"><span>Wear in matches</span><div class="ed-chips">${['auto', 'home', 'away', 'third'].map(c => `<button class="chip ${choice === c ? 'on' : ''}" data-choice="${c}">${c === 'auto' ? 'Auto (no clash)' : KIT_NAMES[c]}</button>`).join('')}</div></div>
+    <div class="ed-row"><span>Pattern</span><div class="ed-chips">${PATTERNS.map(p => `<button class="chip ${kit.pattern === p ? 'on' : ''}" data-pattern="${p}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}</div></div>
+    <div class="kit-colours">${KIT_FIELDS.concat(slot === 'gk' ? [['gloves', 'Gloves']] : []).map(([k, n]) => `<label class="ed-row"><span>${n}</span><input type="color" data-col="${k}" value="${kit[k] || '#ffffff'}"></label>`).join('')}</div>`;
+  kitPreview();
+}
+function kitPreview() { $('kit-preview').innerHTML = kitSvg(kit, kitSlot === 'gk' ? 1 : 10); }
+$('kit-slots').addEventListener('click', e => { const b = e.target.closest('[data-slot]'); if (b) kitLoad(b.dataset.slot); });
+$('kit-form').addEventListener('input', e => { const k = e.target.dataset.col; if (k) { kit[k] = e.target.value; kitPreview(); } });
+$('kit-form').addEventListener('click', e => {
+  const c = e.target.closest('[data-choice]'), p = e.target.closest('[data-pattern]');
+  if (c) { SQ.setKitChoice(c.dataset.choice); c.parentElement.querySelectorAll('[data-choice]').forEach(x => x.classList.toggle('on', x === c)); toast(c.dataset.choice === 'auto' ? 'Kit picked automatically each match' : `Wearing the ${KIT_NAMES[c.dataset.choice].toLowerCase()} kit`, 'check'); }
+  if (p) { kit.pattern = p.dataset.pattern; p.parentElement.querySelectorAll('[data-pattern]').forEach(x => x.classList.toggle('on', x === p)); kitPreview(); }
+});
+$('kit-save').addEventListener('click', () => { SQ.saveKit(kitSlot, kit); toast(`${KIT_NAMES[kitSlot]} kit saved`, 'check'); });
+$('kit-reset').addEventListener('click', () => { SQ.resetKit(kitSlot); kitLoad(kitSlot); toast(`${KIT_NAMES[kitSlot]} kit reset`, 'check'); });
+$('kits-btn').addEventListener('click', () => { kitLoad('home'); openModal('kit-editor'); });
+
 $('play-btn').addEventListener('click', () => { if (match && state === 'menu') startMatchmaking(); });
 $('menu-settings').addEventListener('click', () => openSettings());
 $('menu-controls').addEventListener('click', () => openModal('help'));
@@ -602,7 +659,8 @@ $('mm-cancel').addEventListener('click', () => { mmToken++; goMenu(); });
 function renderLineups() {
   const el = $('lineup-pitch');
   const homeF = SQ.formation(), pr = SQ.profile();
-  const away = teamConfig(opponent);
+  pickKits();
+  const away = TEAMS.away;
   const awayF = FORMATIONS[away.formation] || FORMATIONS['4-3-3'];
   const ink = hex => { const n = parseInt(hex.slice(1), 16); return ((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) > 165 ? '#111' : '#fff'; };
   const pos = (sl, mirror) => {
@@ -610,9 +668,10 @@ function renderLineups() {
     return mirror ? [100 - x, 100 - y] : [x, y];
   };
   let html = '', k = 0;
+  const hk = TEAMS.home.kit;
   pr.lineup.forEach((id, i) => {
     const p = SQ.DB[id], [x, y] = pos(homeF[i], false);
-    html += `<div class="lu${p.star ? ' star' : ''}" style="left:${x}%;top:${y}%;--ring:#2a6bff;animation-delay:${(k++) * 40}ms"><div class="lu-face">${avatar(p)}</div><span class="lu-num">${p.num}</span><b>${p.name.split(' ').slice(-1)[0]}</b></div>`;
+    html += `<div class="lu${p.star ? ' star' : ''}" style="left:${x}%;top:${y}%;--ring:${hk.shirt};--ringInk:${ink(hk.shirt)};animation-delay:${(k++) * 40}ms"><div class="lu-face">${avatar(p, hk.shirt, hk.trim)}</div><span class="lu-num">${p.num}</span><b>${p.name.split(' ').slice(-1)[0]}</b></div>`;
   });
   away.players.forEach((p, i) => {
     const [x, y] = pos(awayF[i], true);
@@ -862,7 +921,7 @@ function applyAudio() { sound.setVolume(settings.volume / 100, settings.crowd / 
 for (const k in DEFAULTS) applySetting(k);
 
 function openModal(id) { $(id).classList.remove('hidden'); }
-function closeModals() { for (const id of ['settings', 'help', 'editor']) $(id).classList.add('hidden'); }
+function closeModals() { for (const id of ['settings', 'help', 'editor', 'kit-editor']) $(id).classList.add('hidden'); }
 document.querySelectorAll('.modal').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-close]')) { m.classList.add('hidden'); if (state === 'paused') buildCamStrip(); } });
 });
@@ -1144,9 +1203,9 @@ function drawRadar() {
   const X = x => pad + (x + F.HL) * sx, Z = z => pad + (z + F.HW) * sz;
   const ctl = match.home.controlled;
   for (const p of match.players) {
-    g.fillStyle = p.team.isUser ? '#3d7bff' : '#ff3b3b';
+    g.fillStyle = p.team.cfg.kit.shirt; // dots in each team's match kit
     g.beginPath(); g.arc(X(p.pos.x), Z(p.pos.z), p === ctl ? 5.5 : 4, 0, Math.PI * 2); g.fill();
-    if (p === ctl) { g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke(); }
+    g.strokeStyle = p === ctl ? '#fff' : 'rgba(0,0,0,.55)'; g.lineWidth = p === ctl ? 2 : 1; g.stroke();
   }
   const b = match.ball.pos;
   g.fillStyle = '#ffe14a';

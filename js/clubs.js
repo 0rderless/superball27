@@ -113,8 +113,8 @@ function blueish(hex) {
 }
 export function clubKit(club) { return blueish(club.home.shirt) ? club.away : club.home; }
 
-export function teamConfig(club) {
-  const k = clubKit(club);
+export function teamConfig(club, kit = null) {
+  const k = kit || clubKit(club);
   return {
     name: club.name, short: club.short, color: club.color, club, formation: club.formation,
     kit: k,

@@ -172,6 +172,13 @@ if (rg == 1.0) {
     float f = fract(vBind.x * 8.0 + 0.5);
     float s = smoothstep(0.42, 0.46, f) * (1.0 - smoothstep(0.66, 0.7, f));
     kc = mix(uShirt, uShirt2, s);
+  } else if (uPattern > 2.5 && uPattern < 3.5) {
+    // horizontal hoops
+    float f = fract(vBind.y * 6.5);
+    kc = mix(uShirt, uShirt2, smoothstep(0.46, 0.5, f) * (1.0 - smoothstep(0.96, 1.0, f)));
+  } else if (uPattern > 3.5) {
+    // halves: left and right in the two colours
+    kc = mix(uShirt, uShirt2, smoothstep(-0.004, 0.004, vBind.x));
   } else if (uPattern > 1.5) {
     // diagonal sash across the front + darker side panels
     float d = vBind.x * 0.85 + (vBind.y - uNumY);
@@ -210,7 +217,7 @@ function kitMaterial(kit, skinHex, hairHex, hairStyle, number) {
     uShirt: { value: C(kit.shirt) }, uShirt2: { value: C(kit.shirt2) }, uTrim: { value: C(kit.trim) },
     uShorts: { value: C(kit.shorts) }, uSocks: { value: C(kit.socks) }, uSockTop: { value: C(kit.sockTop) },
     uBoots: { value: C(kit.boots) }, uGloves: { value: C(kit.gloves || skinHex) }, uNumCol: { value: C(kit.number) },
-    uPattern: { value: kit.pattern === 'stripes' ? 1 : kit.pattern === 'sash' ? 2 : 0 },
+    uPattern: { value: { stripes: 1, sash: 2, hoops: 3, halves: 4 }[kit.pattern] || 0 },
     uLong: { value: kit.longSleeve ? 1 : 0 },
     uHairY: { value: A.hairY + hairOffset },
     uBackZ: { value: A.stats.backZ }, uChestZ: { value: A.stats.chestZ },

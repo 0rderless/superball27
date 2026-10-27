@@ -75,7 +75,7 @@
         <div class="load-tip" id="load-tip"></div>
         <div class="tap-start" id="tap-start">TAP ANYWHERE TO START</div>
       </div>
-      <div class="title-ver"><span class="build-no">Build 24</span> · Ontronop Games</div>
+      <div class="title-ver"><span class="build-no">Build 25</span> · Ontronop Games</div>
     </div>
   </div>
 
@@ -135,7 +135,7 @@
       <aside class="squad-side">
         <div class="form-pick" id="form-pick"></div>
         <div class="squad-detail" id="squad-detail"></div>
-        <div class="bench-head"><b>RESERVES</b><small>Tap a player on the pitch, then a reserve to swap</small></div>
+        <div class="bench-head"><b>RESERVES</b><small>Tap a player on the pitch, then a reserve to swap</small><button class="kits-btn" id="kits-btn"><svg class="ico"><use href="#i-shirt"/></svg><span>Kits</span></button></div>
         <div class="bench" id="bench"></div>
       </aside>
     </main>
@@ -259,7 +259,7 @@
   <!-- ============ SETTINGS ============ -->
   <div id="settings" class="modal hidden">
     <div class="modal-card">
-      <div class="modal-head"><h2>SETTINGS <small class="build-no">Build 24</small> <small class="cloud-st"></small></h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
+      <div class="modal-head"><h2>SETTINGS <small class="build-no">Build 25</small> <small class="cloud-st"></small></h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
       <div class="set-body">
         <nav class="set-tabs" id="set-tabs"></nav>
         <div class="set-pane" id="set-pane"></div>
@@ -278,6 +278,20 @@
           <div class="ed-actions"><button class="mbtn primary" id="ed-save">Save</button><button class="mbtn" id="ed-remove">Reset</button></div>
         </div>
         <div class="ed-form" id="ed-form"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="kit-editor" class="modal hidden">
+    <div class="modal-card editor-card">
+      <div class="modal-head"><h2>KITS</h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
+      <div class="ed-body">
+        <div class="ed-left">
+          <div class="ed-chips" id="kit-slots"></div>
+          <div class="ed-preview kit-preview" id="kit-preview"></div>
+          <div class="ed-actions"><button class="mbtn primary" id="kit-save">Save</button><button class="mbtn" id="kit-reset">Reset</button></div>
+        </div>
+        <div class="ed-form" id="kit-form"></div>
       </div>
     </div>
   </div>

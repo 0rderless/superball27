@@ -1,6 +1,7 @@
 // Squad, economy and progression for ZorpFC: player database, the player's profile (coins, owned
 // players, starting XI, training levels), the transfer shop and match rewards. Saved in localStorage.
 import { FORMATIONS, posPenalty } from './config.js';
+import { DEFAULT_KITS } from './kits.js';
 
 // a: attributes 0..99 — pac, sho, pas, dri, def, phy, gk.  look: skin/hair indices + hair style.
 const P = (id, name, pos, num, look, a, extra = {}) => ({ id, name, pos, num, skin: look[0], hair: look[1], style: look[2], a, ...extra });
@@ -85,6 +86,8 @@ export function profile() {
   if (prof) return prof;
   try { prof = JSON.parse(localStorage.getItem(KEY)); } catch (_) { prof = null; }
   if (!prof || prof.v !== 1) prof = fresh();
+  prof.kits = { ...JSON.parse(JSON.stringify(DEFAULT_KITS)), ...(prof.kits || {}) };
+  prof.kitChoice = prof.kitChoice || 'auto';
   prof.custom = prof.custom || {};
   prof.edits = prof.edits || {};
   applyEditor(prof);
@@ -292,3 +295,9 @@ export function removePlayer(id) {
   save();
   return true;
 }
+
+// ---------------------------------------------------------------- kits
+export const kits = () => profile().kits;
+export function saveKit(slot, kit) { profile().kits[slot] = { ...profile().kits[slot], ...kit }; save(); }
+export function setKitChoice(c) { profile().kitChoice = c; save(); }
+export function resetKit(slot) { profile().kits[slot] = JSON.parse(JSON.stringify(DEFAULT_KITS[slot])); save(); }
