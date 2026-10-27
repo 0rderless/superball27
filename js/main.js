@@ -13,7 +13,7 @@ import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 22; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 23; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
@@ -177,6 +177,7 @@ function newMatch() {
   match = new Match(scene, sound, settings, hooks);
   match.diff = effDiff();
   syncOpponentUI();
+  commentary.prefetch([...TEAMS.home.players, ...TEAMS.away.players].map(p => p.name));
 }
 
 // ---------------------------------------------------------------- opponent club

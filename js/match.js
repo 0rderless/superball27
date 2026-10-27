@@ -265,7 +265,7 @@ export class Match {
     return `${w.cfg.name} lead ${w.score}, ${l.score}`;
   }
 
-  say(key, vars, prio = 1) { if (this.hooks.say) this.hooks.say(key, { t: this.away.cfg.name, ...(vars || {}) }, prio); }
+  say(key, vars, prio = 1) { if (this.hooks.say) this.hooks.say(key, { t: this.away.cfg.name, h: this.home.score, a: this.away.score, ...(vars || {}) }, prio); }
 
   startMatch() {
     this.say('kickoff', {}, 3);
