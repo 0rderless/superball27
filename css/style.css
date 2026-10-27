@@ -920,3 +920,8 @@ em.yc { background: #ffd21f; } em.rc { background: #e3102c; }
 .ed-hint { font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 6px 9px; border-radius: 8px; background: rgba(69,224,255,.08); }
 .ed-hint b { color: var(--text); }
 .seg.seg-wrap { flex-wrap: wrap; } .seg.seg-wrap button { flex: 1 0 auto; }
+/* after a goal the banner shrinks to a strip at the top so the celebration is in view */
+#banner.dock { top: calc(4px + var(--st)); transform: scale(.4); transform-origin: 50% 0; }
+#banner { transition: opacity .3s, transform .35s cubic-bezier(.2, 1.3, .4, 1), top .35s ease; }
+#hud.celebrating #radar, #hud.celebrating #player-tag, #hud.celebrating #power { opacity: 0; transition: opacity .3s; }
+#hud.celebrating #banner.dock { top: calc(6px + var(--st)); }

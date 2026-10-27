@@ -23,7 +23,7 @@ import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 34; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 35; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 // cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
 const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
@@ -125,7 +125,7 @@ const ui = {
   power: $('power'), powerFill: $('power').firstElementChild, controls: $('controls'), hud: $('hud'),
 };
 const rctx = ui.radar.getContext('2d');
-let camSnap = false, spCam = false;
+let camSnap = false, spCam = false, bannerDockTimer = 0;
 let bannerTimer = 0, eventTimer = 0;
 const vibrate = p => { if (settings.vibration && navigator.vibrate) try { navigator.vibrate(p); } catch (_) { /* ignore */ } };
 
@@ -169,6 +169,9 @@ const hooks = {
     hooks.banner('GOAL!', `${name}  ${match.home.score} - ${match.away.score}`, 3300, team.isUser ? 'home' : 'away');
     vibrate(team.isUser ? [60, 40, 120] : 40);
     if (team.isUser && !own) showCelebPick();
+    // big for a moment, then out of the way of the celebration
+    clearTimeout(bannerDockTimer);
+    bannerDockTimer = setTimeout(() => { if (ui.banner.classList.contains('show')) ui.banner.classList.add('dock'); }, 1150);
   },
   drillHud(o) { ui.hud.classList.add('drilling'); drillHooks.drillHud(o); },
   fullTime() {
@@ -258,7 +261,7 @@ function showGoalCard(pl) {
   el.innerHTML = html + `<div class="gc-tag">${pl.team.isUser ? 'ZORPFC' : opponent.short} · GOAL</div>`;
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   clearTimeout(goalCardTimer);
-  goalCardTimer = setTimeout(() => el.classList.remove('show'), 3200);
+  goalCardTimer = setTimeout(() => el.classList.remove('show'), 1600);
 }
 
 const SCREENS = ['boot', 'menu', 'matchmaking', 'prematch', 'pause', 'result'];
@@ -1444,6 +1447,7 @@ function updateHUD(dt) {
   ui.clock.textContent = String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
 
   ui.controls.classList.toggle('celebrating', match.phase === 'goal');
+  ui.hud.classList.toggle('celebrating', match.phase === 'goal'); // a clear view of the celebration
   const mode = match.uiMode();
   if (mode !== lastMode) {
     lastMode = mode;
