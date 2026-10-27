@@ -2,6 +2,7 @@
 import * as SQ from './squad.js';
 import { CLUBS, clubSquad } from './clubs.js';
 import * as L from './league.js';
+import * as C from './cup.js';
 
 export const USER = 'zorp';
 export const clubById = id => CLUBS.find(c => c.id === id) || null;
@@ -40,3 +41,25 @@ export function recordSeasonGame(us, them, scorers) {
   return { champion, pos: L.sortTable(s.table).findIndex(r => r.id === USER) + 1 };
 }
 export function abandonSeason() { delete SQ.profile().season; SQ.save(); }
+
+// ---------------------------------------------------------------- cup
+export const cup = () => SQ.profile().cup || null;
+export function startCup() {
+  SQ.profile().cup = C.newCup([USER, ...CLUBS.map(c => c.id)], USER);
+  SQ.save();
+  return cup();
+}
+export function nextCupGame() {
+  const c = cup(), t = c && C.cupTie(c);
+  if (!t) return null;
+  return { round: C.ROUND_NAMES[c.round], home: t.h === USER, opp: t.h === USER ? t.a : t.h };
+}
+export function recordCupGame(us, them, pens) {
+  const c = cup();
+  const roundName = C.ROUND_NAMES[c.round];
+  const r = C.recordCupTie(c, { us, them, pens }, { ovr: ovrOf });
+  if (r.won) trophies().cup++;
+  SQ.save();
+  return { ...r, roundName, next: c.winner ? null : C.ROUND_NAMES[c.round], winner: c.winner };
+}
+export function abandonCup() { delete SQ.profile().cup; SQ.save(); }

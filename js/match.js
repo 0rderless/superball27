@@ -6,6 +6,7 @@ import { advanceGait, slotDistance, planTouch, ROLL_DECEL, FOOT_REACH, exposure,
 import { foulChance, fromBehind, cardFor, restartForFoul, wallSpots, isDogso, secondLastX, offsidePosition } from './rules.js';
 import { aimCurl, fly } from './setpiece.js';
 import { CELEB, pickCeleb, celebLength } from './celebrations.js';
+import { Shootout } from './shootout.js';
 
 const V3 = THREE.Vector3;
 const { HL, HW, GW, GH, GD } = F;
@@ -319,9 +320,14 @@ export class Match {
         this._transition = true;
         this.hooks.fade(() => {
           this._transition = false;
-          this.home.dir *= -1; this.away.dir *= -1;
-          this.half = 2; this.clock = 0; this.stoppage = 0;
-          this.setupKickoff(this.away);
+          if (this.half === 1) {
+            this.home.dir *= -1; this.away.dir *= -1;
+            this.half = 2; this.clock = 0; this.stoppage = 0;
+            this.setupKickoff(this.away);
+          } else {
+            this.half = 3; this.clock = 0; this.stoppage = 0;
+            this.setupKickoff(this.home);
+          }
         });
       }
     } else if (ph === 'fulltime' || ph === 'menu' || ph === 'intro') {
@@ -490,7 +496,7 @@ export class Match {
   updateClock(dt) {
     if (this.drill) return; // skill games keep their own clock
     this.clock += dt;
-    if (this.clock < this.halfLen) return;
+    if (this.clock < (this.half === 3 ? this.halfLen * 0.5 : this.halfLen)) return;
     const ball = this.ball;
     const danger = HL - Math.abs(ball.pos.x) < 25 && this.phase === 'play';
     this.stoppage += dt;
@@ -504,6 +510,15 @@ export class Match {
       this.phaseT = 0;
       this.say('halfTime', { s: `${this.home.cfg.name} ${this.home.score}, ${this.away.cfg.name} ${this.away.score}` }, 3);
       this.hooks.banner('HALF TIME', `${this.home.cfg.name} ${this.home.score} - ${this.away.score} ${this.away.cfg.name}`, 3500);
+    } else if (this.knockout && this.home.score === this.away.score && this.half === 2) {
+      // level after 90 in a cup tie: one period of extra time
+      this.phase = 'halftime';
+      this.phaseT = 0;
+      this.hooks.banner('EXTRA TIME', `${this.home.cfg.name} ${this.home.score} - ${this.away.score} ${this.away.cfg.name}`, 3500);
+    } else if (this.knockout && this.home.score === this.away.score) {
+      // still level: penalties
+      this.phase = 'play';
+      new Shootout(this, this.hooks);
     } else {
       this.phase = 'fulltime';
       this.phaseT = 0;
@@ -515,6 +530,7 @@ export class Match {
   }
 
   get minute() {
+    if (this.half === 3) return 90 + Math.min(30, this.clock / (this.halfLen * 0.5) * 30);
     const m = Math.min(45, this.clock / this.halfLen * 45) + (this.half - 1) * 45;
     return m;
   }
@@ -986,7 +1002,7 @@ export class Match {
     if (k.setpiece) for (const q of p.team.opp.players) if (q.wall) q.a.headerT = 0; // the wall jumps
     this.guarantee = k.guarantee ? { to: k.guarantee, id: this.kickId, t: 0 } : null;
     this.sound.kick(k.power);
-    if (k.kind === 'shot') { this.stats[p.team.key].shots++; p.ms.shots++; if (k.mode === 'shot' && k.power > 0.4) this.say('shot', { n: p.name }, 1); }
+    if (k.kind === 'shot' && !this.inShootout) { this.stats[p.team.key].shots++; p.ms.shots++; if (k.mode === 'shot' && k.power > 0.4) this.say('shot', { n: p.name }, 1); }
   }
 
   // ---------------------------------------------------------------- skill moves
@@ -1836,6 +1852,7 @@ export class Match {
     const shooting = type === 'penalty' || (type === 'freekick' && !opts.indirect && toGoal < 33 && Math.abs(spot.z) < 24);
     let taker;
     if (type === 'goalkick') taker = team.gk;
+    else if (opts.taker) taker = opts.taker;
     else if (shooting) taker = team.players.filter(q => !q.isGK).sort((a, b) => b.st.sho - a.st.sho)[0]; // the dead-ball specialist
     else {
       let bd = 1e9;
@@ -2003,6 +2020,18 @@ export class Match {
     this.hooks.banner('RED CARD', `${p.name}${p.yellows >= 2 ? ' · second yellow' : ''} — off!`, 2800, 'card-red');
     this.say('red', { n: p.name }, 3);
     this.sendOff(p);
+  }
+
+  get inShootout() { return !!(this.drill && this.drill.kind === 'shootout'); }
+
+  // the shootout is over: that's full time
+  endShootout(res) {
+    this.shootoutResult = res;
+    this.phase = 'fulltime';
+    this.phaseT = 0;
+    this.restart = null;
+    this.sound.whistle(3, true);
+    this.hooks.fullTime();
   }
 
   // a skill game: take a player out of the scene entirely
@@ -2664,7 +2693,7 @@ export class Match {
     gk.lastKickSeen = this.kickId;
     const onTarget = Math.abs(cross.z) < GW + 0.15 && cross.y < GH + 0.15;
     if (!onTarget) return;
-    if (this.lastKick.team === team.opp && this.lastKick.kind === 'shot' && this.onCounted !== this.lastKick.id) { this.onCounted = this.lastKick.id; this.stats[team.opp.key].on++; if (this.lastKick.by) this.lastKick.by.ms.onTarget++; }
+    if (this.lastKick.team === team.opp && this.lastKick.kind === 'shot' && this.onCounted !== this.lastKick.id && !this.inShootout) { this.onCounted = this.lastKick.id; this.stats[team.opp.key].on++; if (this.lastKick.by) this.lastKick.by.ms.onTarget++; }
     let gp = cross, tg = tc;
     for (let i = 0; i < PRED_N; i++) if (this.pred[i].x * s >= gk.pos.x * s - 0.2) { gp = this.pred[i]; tg = (i + 1) * PRED_DT; break; }
     const lateral = gp.z - gk.pos.z;
@@ -2738,7 +2767,7 @@ export class Match {
     if (!sv.willSave || ball.owner) return;
     if (Math.abs(ball.pos.x - gk.pos.x) > 0.9 || Math.abs(ball.pos.z - gk.pos.z) > (gk.action === 'dive' ? 1.6 : 1.0) || ball.pos.y > 2.8) return;
     gk.save = null;
-    gk.ms.saves++;
+    if (!this.inShootout) gk.ms.saves++;
     this.lastTouch = gk;
     this.kickId++;
     this.lastKick = { kind: 'save', team: gk.team, id: this.kickId, by: gk };

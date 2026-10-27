@@ -16,12 +16,13 @@ import { DRILLS, DRILL, isBetter, fmtScore } from './drills.js';
 import { DrillRun } from './drill-run.js';
 import * as MD from './modes.js';
 import { sortTable, topScorers } from './league.js';
+import { ROUND_NAMES } from './cup.js';
 import { card, clubCard, avatar, cardView, rowsFor } from './cards.js';
 import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 30; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 31; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 // cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
 const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
@@ -168,6 +169,7 @@ const hooks = {
     vibrate(team.isUser ? [60, 40, 120] : 40);
     if (team.isUser && !own) showCelebPick();
   },
+  drillHud(o) { ui.hud.classList.add('drilling'); drillHooks.drillHud(o); },
   fullTime() {
     hooks.banner('FULL TIME', `${match.home.cfg.name} ${match.home.score} - ${match.away.score} ${match.away.cfg.name}`, 2600);
     setTimeout(showResult, 2800);
@@ -194,6 +196,7 @@ $('celeb-pick').addEventListener('pointerdown', e => {
 
 // ---------------------------------------------------------------- state
 let match = null;
+let mode = null; // null = quick match | { type: 'season' | 'cup', round }
 let state = 'boot'; // boot | title | menu | prematch | intro | game | paused | result
 let introT = 0;
 let assetsReady = false;
@@ -214,6 +217,7 @@ function newMatch() {
   pickKits();
   match = new Match(scene, sound, settings, hooks);
   match.diff = effDiff();
+  match.knockout = !!(mode && mode.type === 'cup'); // level after 90: extra time, then penalties
   syncOpponentUI();
   commentary.prefetch([...TEAMS.home.players, ...TEAMS.away.players].map(p => p.name));
 }
@@ -630,7 +634,6 @@ $('kits-btn').addEventListener('click', () => { kitLoad('home'); openModal('kit-
 $('play-btn').addEventListener('click', () => { if (match && state === 'menu') startMatchmaking(); });
 
 // ---------------------------------------------------------------- season
-let mode = null; // null = quick match | { type: 'season' }
 const crestFor = (id, size = 22) => id === MD.USER ? zorpCrestSVG(size) : crestSVG(MD.clubById(id), size);
 function renderSeason() {
   const s = MD.season(), tr = MD.trophies();
@@ -681,10 +684,42 @@ function startSeasonMatch() {
   startPrematch();
 }
 function syncModeTiles() {
+  const cg = MD.nextCupGame(), c = MD.cup();
+  $('cup-tile-sub').textContent = cg ? `${cg.round} · vs ${MD.teamShort(cg.opp)}` : c ? (c.winner === MD.USER ? 'Winners!' : 'Finished') : '8-club knockout';
   const g = MD.nextSeasonGame(), s = MD.season();
   $('season-tile-sub').textContent = g ? `Matchday ${g.round}/${g.rounds} · vs ${MD.teamShort(g.opp)}` : s && s.champion ? 'Season finished' : 'League vs 11 clubs';
 }
 syncModeTiles();
+// ---------------------------------------------------------------- cup
+function renderCup() {
+  const c = MD.cup(), tr = MD.trophies(), body = $('cup-body');
+  const g = MD.nextCupGame();
+  $('cup-sub').textContent = c ? (c.winner ? '· finished' : c.out ? '· knocked out' : `· ${ROUND_NAMES[c.round].toLowerCase()}`) : '';
+  if (!c) {
+    body.innerHTML = `<div class="ssn-start"><svg class="ico big"><use href="#i-star"/></svg>
+      <p>Eight clubs, one trophy. Quarter-final, semi-final, final. Level after 90 minutes? Extra time, then penalties.</p>
+      <div class="row"><button class="mbtn primary" data-cup-new>Enter the cup</button></div><small>Cups won: ${tr.cup}</small></div>`;
+    return;
+  }
+  const tie = t => {
+    const sc = t.hg != null ? `${t.hg}-${t.ag}${t.pens ? ` <i>(${t.pens[0]}-${t.pens[1]} p)</i>` : ''}` : 'v';
+    const cls = id => `${id === MD.USER ? 'me' : ''} ${t.winner ? (t.winner === id ? 'win' : 'lose') : ''}`;
+    return `<div class="tie"><span class="${cls(t.h)}">${crestFor(t.h, 16)}${MD.teamShort(t.h)}</span><b>${sc}</b><span class="${cls(t.a)}">${MD.teamShort(t.a)}${crestFor(t.a, 16)}</span></div>`;
+  };
+  const cols = ROUND_NAMES.map((n, i) => `<div class="cup-col"><small>${n.toUpperCase()}</small>${(c.rounds[i] || Array.from({ length: [4, 2, 1][i] }, () => null)).map(t => t ? tie(t) : '<div class="tie tbd">to be decided</div>').join('')}</div>`).join('');
+  let side;
+  if (g) side = `<div class="ssn-next"><small>${g.round.toUpperCase()}</small><div class="ssn-vs">${crestFor(MD.USER, 34)}<b>VS</b>${crestFor(g.opp, 34)}</div><b class="ssn-opp">${MD.teamName(g.opp)}</b><button class="mbtn primary" id="cup-play">Play the ${g.round.toLowerCase()}</button><button class="mbtn ghost" id="cup-quit">Leave the cup</button></div>`;
+  else side = `<div class="ssn-next ${c.winner === MD.USER ? 'champ' : ''}"><svg class="ico big"><use href="#i-star"/></svg><b class="ssn-opp">${c.winner === MD.USER ? 'CUP WINNERS!' : `${MD.teamName(c.winner)} win the cup`}</b><small>Cups won: ${tr.cup}</small><button class="mbtn primary" data-cup-new>New cup</button></div>`;
+  body.innerHTML = `<div class="cup-bracket">${cols}</div><div class="ssn-side">${side}</div>`;
+}
+function openCup() { renderCup(); openModal('cup'); }
+$('cup-tile').addEventListener('click', openCup);
+$('cup-body').addEventListener('click', e => {
+  if (e.target.closest('[data-cup-new]')) { MD.startCup(); renderCup(); syncModeTiles(); return; }
+  if (e.target.closest('#cup-play')) { closeModals(); const g = MD.nextCupGame(); mode = { type: 'cup', round: g.round }; opponent = MD.clubById(g.opp); startPrematch(); return; }
+  if (e.target.closest('#cup-quit') && confirm('Leave the cup? This draw will be lost.')) { MD.abandonCup(); renderCup(); syncModeTiles(); }
+});
+
 // a season game has finished: into the table it goes
 function recordModeResult(h, a) {
   if (!mode || match.recordedMode) return null;
@@ -695,6 +730,12 @@ function recordModeResult(h, a) {
     const r = MD.recordSeasonGame(h, a, scorers);
     syncModeTiles();
     return r.champion ? (r.champion === MD.USER ? 'CHAMPIONS! ZorpFC win the league' : `${MD.teamName(r.champion)} win the league`) : `ZorpFC are ${r.pos}${['st', 'nd', 'rd'][r.pos - 1] || 'th'} in the table`;
+  }
+  if (mode.type === 'cup') {
+    const so = match.shootoutResult;
+    const r = MD.recordCupGame(h, a, so ? { us: so.home, them: so.away } : undefined);
+    syncModeTiles();
+    return r.won ? 'CUP WINNERS!' : r.out ? `Out in the ${r.roundName.toLowerCase()}` : `Through to the ${r.next.toLowerCase()}`;
   }
   return null;
 }
@@ -837,7 +878,7 @@ async function startPrematch() {
   requestWakeLock();
   const pm = $('prematch');
   pm.classList.remove('ready');
-  pm.querySelector('.pm-head b').textContent = mode && mode.type === 'season' ? `SEASON · MATCHDAY ${mode.round}` : 'QUICK MATCH';
+  pm.querySelector('.pm-head b').textContent = mode && mode.type === 'season' ? `SEASON · MATCHDAY ${mode.round}` : mode && mode.type === 'cup' ? `CUP · ${mode.round.toUpperCase()}` : 'QUICK MATCH';
   renderLineups();
   showScreen('prematch');
   for (const el of pm.querySelectorAll('.pm-club, .pm-vs, .lineup-pitch')) { el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; }
@@ -903,7 +944,9 @@ function showResult() {
   const h = match.home.score, a = match.away.score;
   $('ft-h').textContent = h;
   $('ft-a').textContent = a;
-  $('ft-msg').textContent = h > a ? 'ZORPFC WIN!' : h < a ? `${opponent.name.toUpperCase()} WIN` : 'IT\'S A DRAW';
+  const so = match.shootoutResult;
+  $('ft-msg').textContent = so ? (so.winner === 'home' ? `ZORPFC WIN ${so.home}-${so.away} ON PENS` : `${opponent.name.toUpperCase()} WIN ${so.away}-${so.home} ON PENS`)
+    : h > a ? 'ZORPFC WIN!' : h < a ? `${opponent.name.toUpperCase()} WIN` : 'IT\'S A DRAW';
   const st = match.stats;
   const total = st.home.poss + st.away.poss || 1;
   const rows = [
@@ -938,7 +981,8 @@ function showResult() {
   }
   const note = recordModeResult(h, a);
   if (note) $('ft-msg').textContent += ` · ${note}`;
-  $('again-btn').textContent = mode && mode.type === 'season' ? (MD.nextSeasonGame() ? 'Next matchday' : 'Season table') : 'Play again';
+  $('again-btn').textContent = mode && mode.type === 'season' ? (MD.nextSeasonGame() ? 'Next matchday' : 'Season table')
+    : mode && mode.type === 'cup' ? (MD.nextCupGame() ? `On to the ${MD.nextCupGame().round.toLowerCase()}` : 'Cup draw') : 'Play again';
   showScreen('result');
   ui.hud.classList.add('hidden');
 }
@@ -1034,6 +1078,7 @@ $('layout-edit').addEventListener('pointerup', () => { dragBtn = null; });
 $('quit-btn').addEventListener('click', () => { closeModals(); goMenu(); });
 $('again-btn').addEventListener('click', () => {
   if (mode && mode.type === 'season') { goMenu(); setTimeout(openSeason, 320); return; }
+  if (mode && mode.type === 'cup') { goMenu(); setTimeout(openCup, 320); return; }
   startMatchmaking();
 });
 $('menu-btn').addEventListener('click', () => goMenu());
@@ -1088,7 +1133,7 @@ function applyAudio() { sound.setVolume(settings.volume / 100, settings.crowd / 
 for (const k in DEFAULTS) applySetting(k);
 
 function openModal(id) { $(id).classList.remove('hidden'); }
-function closeModals() { for (const id of ['settings', 'help', 'editor', 'kit-editor', 'drills', 'drill-result', 'season']) $(id).classList.add('hidden'); }
+function closeModals() { for (const id of ['settings', 'help', 'editor', 'kit-editor', 'drills', 'drill-result', 'season', 'cup']) $(id).classList.add('hidden'); }
 document.querySelectorAll('.modal').forEach(m => {
   m.addEventListener('click', e => { if (m.id === 'drill-result') return; if (e.target === m || e.target.closest('[data-close]')) { m.classList.add('hidden'); if (state === 'paused') buildCamStrip(); } });
 });

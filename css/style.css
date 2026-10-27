@@ -850,3 +850,26 @@ input, select, textarea { font-size: 16px !important; -webkit-user-select: text;
 .ico.big { width: 44px; height: 44px; color: #ffd21f; }
 .mbtn.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); font-size: 12px; padding: 6px; }
 .hub-modes { grid-template-columns: 1fr 1fr; }
+/* cup */
+.tile-cup .ico { color: #b48cff; }
+.hub-modes { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.hub-modes .tile-small { flex-direction: column; align-items: flex-start; gap: 3px; padding: 7px 9px; }
+.hub-modes .tile-small .ico { width: 22px; height: 22px; }
+.cup-body { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 12px; min-height: 0; overflow: hidden; flex: 1; }
+.cup-bracket { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; overflow-y: auto; min-height: 0; }
+.cup-col { display: flex; flex-direction: column; justify-content: space-around; gap: 6px; }
+.cup-col > small { font: 800 10px var(--ui); letter-spacing: 1.3px; color: var(--muted); text-align: center; }
+.tie { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 4px; padding: 5px 6px; border-radius: 10px; background: rgba(255,255,255,.05); border: 1px solid var(--line); font-size: 11.5px; font-weight: 700; }
+.tie span { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.tie span:first-child { justify-content: flex-start; }
+.tie span:last-child { justify-content: flex-end; }
+.tie svg { width: 16px; height: 16px; flex: none; }
+.tie b { font-family: var(--display); font-size: 13px; text-align: center; white-space: nowrap; }
+.tie b i { font-style: normal; font-size: 10px; color: var(--muted); }
+.tie .me { color: var(--cyan); }
+.tie .lose { opacity: .45; }
+.tie .win { color: #fff; }
+.tie .me.win { color: var(--cyan); }
+.tie.tbd { display: block; text-align: center; color: var(--muted); font-weight: 600; opacity: .6; }
+.hub-modes .tile-small b { font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.hub-modes .tile-small > div { width: 100%; }
