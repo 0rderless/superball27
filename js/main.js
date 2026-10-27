@@ -14,12 +14,14 @@ import { CELEBS } from './celebrations.js';
 import { rating, playerOfMatch, summary } from './ratings.js';
 import { DRILLS, DRILL, isBetter, fmtScore } from './drills.js';
 import { DrillRun } from './drill-run.js';
+import * as MD from './modes.js';
+import { sortTable, topScorers } from './league.js';
 import { card, clubCard, avatar, cardView, rowsFor } from './cards.js';
 import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 29; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 30; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 // cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
 const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
@@ -627,6 +629,76 @@ $('kits-btn').addEventListener('click', () => { kitLoad('home'); openModal('kit-
 
 $('play-btn').addEventListener('click', () => { if (match && state === 'menu') startMatchmaking(); });
 
+// ---------------------------------------------------------------- season
+let mode = null; // null = quick match | { type: 'season' }
+const crestFor = (id, size = 22) => id === MD.USER ? zorpCrestSVG(size) : crestSVG(MD.clubById(id), size);
+function renderSeason() {
+  const s = MD.season(), tr = MD.trophies();
+  const body = $('ssn-body');
+  $('ssn-sub').textContent = s ? (s.champion ? '· finished' : `· matchday ${s.round + 1} of ${s.rounds.length}`) : '';
+  if (!s) {
+    body.innerHTML = `<div class="ssn-start"><svg class="ico big"><use href="#i-trophy"/></svg>
+      <p>Take ZorpFC through a league against all 11 clubs. Every other game is played out around you; finish top to lift the trophy.</p>
+      <div class="row"><button class="mbtn primary" data-new="1">11 games</button><button class="mbtn" data-new="2">22 games (home &amp; away)</button></div>
+      <small>League titles: ${tr.league}</small></div>`;
+    return;
+  }
+  const table = sortTable(s.table);
+  const rows = table.map((r, i) => `<tr class="${r.id === MD.USER ? 'me' : ''}"><td>${i + 1}</td><td class="tm">${crestFor(r.id, 18)}<span>${MD.teamName(r.id)}</span></td><td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td><td><b>${r.pts}</b></td></tr>`).join('');
+  const g = MD.nextSeasonGame();
+  const last = s.results[s.results.length - 1] || [];
+  const scorers = topScorers(s, 5);
+  let side;
+  if (g) {
+    side = `<div class="ssn-next"><small>MATCHDAY ${g.round} OF ${g.rounds} · ${g.home ? 'HOME' : 'AWAY'}</small>
+      <div class="ssn-vs">${crestFor(MD.USER, 34)}<b>VS</b>${crestFor(g.opp, 34)}</div><b class="ssn-opp">${MD.teamName(g.opp)}</b>
+      <button class="mbtn primary" id="ssn-play">Play matchday ${g.round}</button></div>`;
+  } else {
+    const won = s.champion === MD.USER, pos = table.findIndex(r => r.id === MD.USER) + 1;
+    side = `<div class="ssn-next ${won ? 'champ' : ''}"><svg class="ico big"><use href="#i-trophy"/></svg><b class="ssn-opp">${won ? 'CHAMPIONS!' : `${MD.teamName(s.champion)} are champions`}</b>
+      <small>ZorpFC finished ${pos}${['st', 'nd', 'rd'][pos - 1] || 'th'} · League titles: ${tr.league}</small><button class="mbtn primary" data-new="${s.legs}">New season</button></div>`;
+  }
+  body.innerHTML = `<div class="ssn-table"><table><thead><tr><th>#</th><th class="tm">Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="ssn-side">${side}
+      ${last.length ? `<div class="ssn-box"><small>LAST ROUND</small>${last.map(f => `<div class="res ${f.h === MD.USER || f.a === MD.USER ? 'me' : ''}"><span>${MD.teamShort(f.h)}</span><b>${f.hg} - ${f.ag}</b><span>${MD.teamShort(f.a)}</span></div>`).join('')}</div>` : ''}
+      ${scorers.length ? `<div class="ssn-box"><small>TOP SCORERS</small>${scorers.map(x => `<div class="sc ${x.team === MD.USER ? 'me' : ''}"><span>${x.name} <i>${MD.teamShort(x.team)}</i></span><b>${x.goals}</b></div>`).join('')}</div>` : ''}
+      ${g ? '<button class="mbtn ghost" id="ssn-quit">Abandon season</button>' : ''}
+    </div>`;
+}
+function openSeason() { renderSeason(); openModal('season'); }
+$('season-tile').addEventListener('click', openSeason);
+$('ssn-body').addEventListener('click', e => {
+  const n = e.target.closest('[data-new]');
+  if (n) { MD.startSeason(+n.dataset.new); renderSeason(); syncModeTiles(); return; }
+  if (e.target.closest('#ssn-play')) { closeModals(); startSeasonMatch(); return; }
+  if (e.target.closest('#ssn-quit') && confirm('Abandon this season? The table and results will be lost.')) { MD.abandonSeason(); renderSeason(); syncModeTiles(); }
+});
+function startSeasonMatch() {
+  const g = MD.nextSeasonGame();
+  if (!g) return;
+  mode = { type: 'season', round: g.round };
+  opponent = MD.clubById(g.opp);
+  startPrematch();
+}
+function syncModeTiles() {
+  const g = MD.nextSeasonGame(), s = MD.season();
+  $('season-tile-sub').textContent = g ? `Matchday ${g.round}/${g.rounds} · vs ${MD.teamShort(g.opp)}` : s && s.champion ? 'Season finished' : 'League vs 11 clubs';
+}
+syncModeTiles();
+// a season game has finished: into the table it goes
+function recordModeResult(h, a) {
+  if (!mode || match.recordedMode) return null;
+  match.recordedMode = true;
+  if (mode.type === 'season') {
+    const scorers = [];
+    for (const p of match.matchPlayers()) for (let i = 0; i < p.ms.goals; i++) scorers.push({ name: p.name, team: p.team === 'home' ? MD.USER : opponent.id });
+    const r = MD.recordSeasonGame(h, a, scorers);
+    syncModeTiles();
+    return r.champion ? (r.champion === MD.USER ? 'CHAMPIONS! ZorpFC win the league' : `${MD.teamName(r.champion)} win the league`) : `ZorpFC are ${r.pos}${['st', 'nd', 'rd'][r.pos - 1] || 'th'} in the table`;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------- skill games
 function renderDrills() {
   $('drill-list').innerHTML = DRILLS.map(d => `<button class="drill" data-drill="${d.key}"><svg class="ico"><use href="#${d.icon}"/></svg><b>${d.name}</b><p>${d.desc}</p><span class="best">BEST ${fmtScore(d.key, SQ.drillBest(d.key))}</span></button>`).join('');
@@ -684,6 +756,7 @@ if (standalone) $('install-tip').classList.add('hidden');
 // ---------------------------------------------------------------- matchmaking
 let mmToken = 0;
 async function startMatchmaking() {
+  mode = null;
   const tok = ++mmToken;
   state = 'matchmaking';
   sound.init();
@@ -764,6 +837,7 @@ async function startPrematch() {
   requestWakeLock();
   const pm = $('prematch');
   pm.classList.remove('ready');
+  pm.querySelector('.pm-head b').textContent = mode && mode.type === 'season' ? `SEASON · MATCHDAY ${mode.round}` : 'QUICK MATCH';
   renderLineups();
   showScreen('prematch');
   for (const el of pm.querySelectorAll('.pm-club, .pm-vs, .lineup-pitch')) { el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; }
@@ -862,6 +936,9 @@ function showResult() {
     const r = SQ.matchRewards(h, a, settings.difficulty, opponent.ovr);
     $('ft-rewards').innerHTML = r.lines.map(([l, v]) => `<span>${l} +${v}</span>`).join('') + `<span class="total"><svg class="ico"><use href="#i-coin"/></svg>+${r.total}</span>`;
   }
+  const note = recordModeResult(h, a);
+  if (note) $('ft-msg').textContent += ` · ${note}`;
+  $('again-btn').textContent = mode && mode.type === 'season' ? (MD.nextSeasonGame() ? 'Next matchday' : 'Season table') : 'Play again';
   showScreen('result');
   ui.hud.classList.add('hidden');
 }
@@ -955,7 +1032,10 @@ $('layout-edit').addEventListener('pointermove', e => {
 });
 $('layout-edit').addEventListener('pointerup', () => { dragBtn = null; });
 $('quit-btn').addEventListener('click', () => { closeModals(); goMenu(); });
-$('again-btn').addEventListener('click', () => startMatchmaking());
+$('again-btn').addEventListener('click', () => {
+  if (mode && mode.type === 'season') { goMenu(); setTimeout(openSeason, 320); return; }
+  startMatchmaking();
+});
 $('menu-btn').addEventListener('click', () => goMenu());
 
 // ---------------------------------------------------------------- settings panel (built from a schema)
@@ -1008,7 +1088,7 @@ function applyAudio() { sound.setVolume(settings.volume / 100, settings.crowd / 
 for (const k in DEFAULTS) applySetting(k);
 
 function openModal(id) { $(id).classList.remove('hidden'); }
-function closeModals() { for (const id of ['settings', 'help', 'editor', 'kit-editor', 'drills', 'drill-result']) $(id).classList.add('hidden'); }
+function closeModals() { for (const id of ['settings', 'help', 'editor', 'kit-editor', 'drills', 'drill-result', 'season']) $(id).classList.add('hidden'); }
 document.querySelectorAll('.modal').forEach(m => {
   m.addEventListener('click', e => { if (m.id === 'drill-result') return; if (e.target === m || e.target.closest('[data-close]')) { m.classList.add('hidden'); if (state === 'paused') buildCamStrip(); } });
 });

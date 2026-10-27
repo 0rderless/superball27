@@ -78,7 +78,7 @@
         <div class="load-tip" id="load-tip"></div>
         <div class="tap-start" id="tap-start">TAP ANYWHERE TO START</div>
       </div>
-      <div class="title-ver"><span class="build-no">Build 29</span> · Ontronop Games</div>
+      <div class="title-ver"><span class="build-no">Build 30</span> · Ontronop Games</div>
     </div>
   </div>
 
@@ -127,6 +127,10 @@
           <div class="q-row" data-quick="minutes"><label>Match length</label><div class="seg"></div></div>
         </div>
         <div class="hub-pair hub-modes">
+          <button class="tile tile-small tile-mode tile-season" id="season-tile">
+            <svg class="ico"><use href="#i-trophy"/></svg>
+            <div><b>SEASON</b><small id="season-tile-sub">League vs 11 clubs</small></div>
+          </button>
           <button class="tile tile-small tile-mode" id="drills-tile">
             <svg class="ico"><use href="#i-cone"/></svg>
             <div><b>SKILL GAMES</b><small>Shooting, free kicks, pens, cones</small></div>
@@ -270,7 +274,7 @@
   <!-- ============ SETTINGS ============ -->
   <div id="settings" class="modal hidden">
     <div class="modal-card">
-      <div class="modal-head"><h2>SETTINGS <small class="build-no">Build 29</small> <small class="cloud-st"></small></h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
+      <div class="modal-head"><h2>SETTINGS <small class="build-no">Build 30</small> <small class="cloud-st"></small></h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
       <div class="set-body">
         <nav class="set-tabs" id="set-tabs"></nav>
         <div class="set-pane" id="set-pane"></div>
@@ -304,6 +308,13 @@
         </div>
         <div class="ed-form" id="kit-form"></div>
       </div>
+    </div>
+  </div>
+
+  <div id="season" class="modal hidden">
+    <div class="modal-card season-card">
+      <div class="modal-head"><h2>SEASON <small id="ssn-sub"></small></h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
+      <div class="ssn-body" id="ssn-body"></div>
     </div>
   </div>
 

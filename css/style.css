@@ -814,3 +814,39 @@ input, select, textarea { font-size: 16px !important; -webkit-user-select: text;
 .dr-best.new { color: #19c37d; }
 .drill-res-card .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .drill-res-card .mbtn { white-space: nowrap; }
+/* season */
+.tile-season .ico { color: #ffd21f; }
+.season-card { width: min(940px, 97vw); max-height: 94vh; }
+.modal-head h2 small#ssn-sub { font: 600 12px var(--ui); color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+.ssn-body { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 12px; min-height: 0; overflow: hidden; flex: 1; }
+.ssn-table { overflow-y: auto; min-height: 0; border-radius: 12px; background: rgba(255,255,255,.03); touch-action: pan-y; }
+.ssn-table table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-weight: 700; }
+.ssn-table th { position: sticky; top: 0; background: #0d1838; color: var(--muted); font-size: 10.5px; letter-spacing: 1px; padding: 5px 4px; text-align: center; }
+.ssn-table td { padding: 3px 4px; text-align: center; border-top: 1px solid rgba(255,255,255,.05); }
+.ssn-table .tm { text-align: left; }
+.ssn-table td.tm { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
+.ssn-table td.tm svg { flex: none; width: 18px; height: 18px; }
+.ssn-table td.tm span { overflow: hidden; text-overflow: ellipsis; }
+.ssn-table tr.me td { background: rgba(69,224,255,.12); color: #fff; }
+.ssn-table tr:first-child td:first-child { color: #ffd21f; }
+.ssn-side { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; touch-action: pan-y; }
+.ssn-next { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px; border-radius: 14px; text-align: center; background: linear-gradient(160deg, rgba(29,92,255,.25), rgba(29,92,255,.06)); border: 1px solid rgba(79,134,255,.5); }
+.ssn-next.champ { background: linear-gradient(160deg, rgba(255,210,31,.3), rgba(255,210,31,.06)); border-color: rgba(255,210,31,.6); }
+.ssn-next small { font: 800 10.5px var(--ui); letter-spacing: 1.2px; color: var(--muted); }
+.ssn-vs { display: flex; align-items: center; gap: 12px; font-family: var(--display); color: var(--muted); }
+.ssn-vs svg { width: 34px; height: 34px; }
+.ssn-opp { font-family: var(--display); font-size: 18px; letter-spacing: .5px; }
+.ssn-box { padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.04); display: grid; gap: 3px; }
+.ssn-box > small { font: 800 10px var(--ui); letter-spacing: 1.4px; color: var(--muted); margin-bottom: 2px; }
+.ssn-box .res { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; font-size: 12px; font-weight: 700; }
+.ssn-box .res span:first-child { text-align: right; }
+.ssn-box .res b { font-family: var(--display); min-width: 40px; text-align: center; }
+.ssn-box .sc { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; }
+.ssn-box .sc i { font-style: normal; color: var(--muted); font-size: 10.5px; }
+.ssn-box .me { color: var(--cyan); }
+.ssn-start { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px; text-align: center; }
+.ssn-start p { max-width: 460px; margin: 0; color: var(--muted); font-weight: 600; }
+.ssn-start .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.ico.big { width: 44px; height: 44px; color: #ffd21f; }
+.mbtn.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); font-size: 12px; padding: 6px; }
+.hub-modes { grid-template-columns: 1fr 1fr; }
