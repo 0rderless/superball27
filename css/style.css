@@ -726,3 +726,9 @@ button:active { transform: scale(.97); }
 .shop-search { flex: 1 1 140px; max-width: 240px; }
 .shop-sort { flex: none; }
 .editor-btn { margin-left: 0; }
+/* a big bench must scroll sideways, never squeeze the pitch off the screen */
+#page-squad { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+.squad-side, .bench, .form-pick { min-width: 0; }
+.page { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); }
+#page-shop { grid-template-columns: minmax(0, 1fr); }
+.bench .bench-card { flex: none; }
