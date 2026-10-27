@@ -550,7 +550,7 @@ export class Match {
       p.idleT += dt;
       if (hasBall) {
         p.manual = true;
-        p.desired.multiplyScalar(Math.max(0, 1 - dt * 5));
+        p.desired.multiplyScalar(Math.max(0, 1 - dt * (this.settings.dribAssist !== false ? 20 : 5)));
         p.sprint = false;
       } else {
         p.manual = p.idleT < 0.45 && !p.recv;
@@ -2545,12 +2545,14 @@ export class Match {
       // facing
       const sp = Math.hypot(p.vel.x, p.vel.z);
       let tf = null;
+      const snappy = p.team.isUser && p === p.team.controlled && this.settings.dribAssist !== false && p.busy <= 0;
       if (p.lockFacing !== null && p.busy > 0) tf = p.lockFacing;
       else if ((p.jockey || p.userJockey) && p.faceTo && sp < 7.5 && ball.owner !== p) {
         // jockeying defenders / keepers shuffle while still facing the ball
         const fx = p.faceTo.x - p.pos.x, fz = p.faceTo.z - p.pos.z;
         if (fx * fx + fz * fz > 0.5) tf = Math.atan2(fx, fz);
       }
+      else if (snappy && Math.hypot(p.desired.x, p.desired.z) > 0.8) tf = Math.atan2(p.desired.x, p.desired.z);
       else if (ball.owner === p && sp < 1.2 && Math.hypot(p.desired.x, p.desired.z) > 0.8) tf = Math.atan2(p.desired.x, p.desired.z);
       else if (sp > 0.8) tf = Math.atan2(p.vel.x, p.vel.z);
       else if (p.lockFacing !== null) tf = p.lockFacing;
@@ -2561,7 +2563,7 @@ export class Match {
       p.turnRate = 0;
       if (tf !== null) {
         const userCtl = p.team.isUser && p === p.team.controlled;
-        const rate = ball.owner === p ? (userCtl ? (p.sprint ? 9 : 12) : (p.sprint ? 7 : 9)) : userCtl ? 13 : 10;
+        const rate = snappy ? 16 : ball.owner === p ? (userCtl ? (p.sprint ? 9 : 12) : (p.sprint ? 7 : 9)) : userCtl ? 13 : 10;
         const d = wrap(tf - p.facing);
         const step = clamp(d, -rate * dt, rate * dt);
         p.facing = wrap(p.facing + step);
@@ -2608,6 +2610,7 @@ export class Match {
       if (dl > mx) { v.x += dx / dl * mx; v.z += dz / dl * mx; } else { v.x = d.x; v.z = d.z; }
       return;
     }
+    if (p.team.isUser && p === p.team.controlled && this.settings.dribAssist !== false) { this.snappyMove(p, dt, hasBall, sp, ds); return; }
     const agility = hasBall ? 0.72 + 0.5 * p.st.dri : 0.8 + 0.35 * p.st.spd;
     const accel = (hasBall ? 6.2 : 7.5) * (0.82 + 0.36 * p.st.spd) * (sp < 3 ? 1.45 : 1);
     const brake = hasBall ? 15 : 17;
@@ -2633,6 +2636,26 @@ export class Match {
     const grip = (hasBall ? 10.5 : 15) * agility;
     const maxYaw = Math.min(sp < 2.6 ? 11 * agility : 99, grip / Math.max(sp, 0.9));
     const ang = ah + clamp(err, -maxYaw * dt, maxYaw * dt);
+    v.x = Math.sin(ang) * ns; v.z = Math.cos(ang) * ns;
+  }
+
+  // Your controlled player (with dribble assist): game-like, responsive movement. Quick to get
+  // going and to stop, turns fast with only a small speed dip on big changes of direction.
+  snappyMove(p, dt, hasBall, sp, ds) {
+    const v = p.vel, d = p.desired;
+    const accel = 24 * (0.85 + 0.3 * p.st.spd), brake = 28;
+    if (ds < 0.15) {
+      const ns = Math.max(0, sp - brake * dt);
+      if (sp > 0) { v.x *= ns / sp; v.z *= ns / sp; }
+      return;
+    }
+    const tx = d.x / ds, tz = d.z / ds;
+    if (sp < 0.9) { const ns = Math.min(ds, sp + accel * dt); v.x = tx * ns; v.z = tz * ns; return; }
+    const ah = Math.atan2(v.x, v.z), err = wrap(Math.atan2(tx, tz) - ah), ae = Math.abs(err);
+    const yaw = (hasBall ? 11 : 13) * (0.85 + 0.3 * (hasBall ? p.st.dri : p.st.spd));
+    const ang = ah + clamp(err, -yaw * dt, yaw * dt);
+    const target = ds * (1 - 0.4 * clamp((ae - 0.6) / 2.5, 0, 1));
+    const ns = sp < target ? Math.min(target, sp + accel * dt) : Math.max(target, sp - brake * dt);
     v.x = Math.sin(ang) * ns; v.z = Math.cos(ang) * ns;
   }
 
