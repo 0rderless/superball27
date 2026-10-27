@@ -318,7 +318,8 @@ export function animateModel(m, a, time, dt) {
   dt = Math.min(dt || 0.016, 0.05);
   const P = m.prev;
   const started = k => a[k] >= 0 && !(P[k] >= 0);
-  const sp = a.speed;
+  // posed celebrations stand (or glide) on the spot: no running legs underneath
+  const sp = a.celebT >= 0 && (a.celebKind === 'siu' || a.celebKind === 'slide') ? 0 : a.speed;
 
   // ---------------- one-shot triggers ----------------
   if (started('slideT')) playShot(m, 'Slide_Loop', { fadeIn: 0.08, from: 0.05, speed: 1.2 });
@@ -327,7 +328,7 @@ export function animateModel(m, a, time, dt) {
   const celebrating = a.celebrate > 0.5 && a.celebrateStyle === 1;
   if (celebrating && !(m.shot && m.shot.celeb)) {
     const list = ['Celebration', 'Yes', 'Dance_Loop', 'BackFlip'];
-    const name = list[(a.celebClip || 0) % list.length];
+    const name = a.celebClipName || list[(a.celebClip || 0) % list.length];
     playShot(m, name, { fadeIn: 0.25, loop: name !== 'BackFlip' });
     m.shot.celeb = true;
   }
@@ -464,6 +465,66 @@ export function animateModel(m, a, time, dt) {
     body.rotation.z += Math.sin(time * 3) * 0.16 * a.celebrate;
   }
   if (a.sad > 0 && sp > 0.4) { rot(m, 'neck_01', 'x', 0.4 * a.sad); rot(m, 'spine_03', 'x', 0.15 * a.sad); }
+  if (a.celebT >= 0) {
+    if (a.celebKind === 'siu') siuPose(m, a.celebT);
+    else if (a.celebKind === 'slide') kneeSlidePose(m, a.celebT, time);
+    else if (a.celebKind === 'cold') {
+      // Palmer: arms folded, shivering, rubbing his arms
+      m.body.rotation.z += Math.sin(time * 38) * 0.018;
+      rot(m, 'upperarm_l', 'y', Math.sin(time * 9) * 0.12); rot(m, 'upperarm_r', 'y', -Math.sin(time * 9) * 0.12);
+      rot(m, 'neck_01', 'x', 0.12);
+    }
+  }
+}
+
+// ---- goal celebrations posed by hand (t = seconds into the routine) ----
+// The Siu: a little run-in, jump with a half turn, land legs apart, arms thrust down and back.
+function siuPose(m, t) {
+  const body = m.body, E = x => ease(Math.min(1, Math.max(0, x)));
+  const crouch = t < 0.3 ? E(t / 0.3) : t < 0.42 ? 1 - E((t - 0.3) / 0.12) : 0;
+  const air = t >= 0.38 && t < 0.98 ? (t - 0.38) / 0.6 : -1;
+  const land = t >= 0.98 ? E((t - 0.98) / 0.18) : 0;
+  const squash = t >= 0.98 && t < 1.3 ? Math.sin((t - 0.98) / 0.32 * Math.PI) : 0;
+  // crouch to jump
+  rot(m, 'thigh_l', 'x', -0.55 * crouch); rot(m, 'thigh_r', 'x', -0.55 * crouch);
+  rot(m, 'calf_l', 'x', 1.0 * crouch); rot(m, 'calf_r', 'x', 1.0 * crouch);
+  body.position.y -= 0.16 * crouch + 0.1 * squash;
+  if (air >= 0) {
+    body.position.y += 0.75 * Math.sin(air * Math.PI);
+    body.rotation.y += Math.PI * E(air * 1.15);
+    const up = Math.sin(Math.min(1, air * 1.6) * Math.PI * 0.5);
+    rot(m, 'upperarm_l', 'z', 2.5 * up); rot(m, 'upperarm_r', 'z', -2.5 * up);
+    rot(m, 'thigh_l', 'x', -0.35 * up); rot(m, 'thigh_r', 'x', -0.2 * up); rot(m, 'calf_l', 'x', 0.7 * up); rot(m, 'calf_r', 'x', 0.5 * up);
+  }
+  if (land > 0) {
+    body.rotation.y += Math.PI;
+    // legs apart, knees soft, chest out, arms down and back, chin up
+    rot(m, 'thigh_l', 'z', -0.38 * land); rot(m, 'thigh_r', 'z', 0.38 * land);
+    rot(m, 'thigh_l', 'x', -0.15 * land); rot(m, 'thigh_r', 'x', -0.15 * land);
+    rot(m, 'calf_l', 'x', 0.3 * land); rot(m, 'calf_r', 'x', 0.3 * land);
+    rot(m, 'foot_l', 'z', 0.3 * land); rot(m, 'foot_r', 'z', -0.3 * land);
+    rot(m, 'upperarm_l', 'z', 0.55 * land); rot(m, 'upperarm_r', 'z', -0.55 * land);
+    rot(m, 'upperarm_l', 'x', -0.55 * land); rot(m, 'upperarm_r', 'x', -0.55 * land);
+    rot(m, 'lowerarm_l', 'x', -0.15 * land); rot(m, 'lowerarm_r', 'x', -0.15 * land);
+    rot(m, 'spine_02', 'x', -0.18 * land); rot(m, 'spine_03', 'x', -0.2 * land);
+    rot(m, 'neck_01', 'x', -0.25 * land);
+    body.position.y -= 0.05 * land;
+  }
+}
+
+// Knee slide: drop onto the knees at speed and glide, leaning back with the arms spread wide.
+function kneeSlidePose(m, t, time) {
+  const body = m.body, k = ease(Math.min(1, t / 0.22));
+  body.position.y -= 0.5 * k;
+  rot(m, 'thigh_l', 'x', 0.1 * k); rot(m, 'thigh_r', 'x', 0.1 * k);
+  rot(m, 'thigh_l', 'z', -0.12 * k); rot(m, 'thigh_r', 'z', 0.12 * k);
+  rot(m, 'calf_l', 'x', 1.75 * k); rot(m, 'calf_r', 'x', 1.75 * k);
+  rot(m, 'foot_l', 'x', 0.6 * k); rot(m, 'foot_r', 'x', 0.6 * k);
+  rot(m, 'spine_01', 'x', -0.2 * k); rot(m, 'spine_02', 'x', -0.15 * k); rot(m, 'spine_03', 'x', -0.2 * k);
+  rot(m, 'neck_01', 'x', -0.35 * k);
+  const roar = 0.15 * Math.sin(time * 6) * k;
+  rot(m, 'upperarm_l', 'z', (1.75 + roar) * k); rot(m, 'upperarm_r', 'z', -(1.75 + roar) * k);
+  rot(m, 'lowerarm_l', 'x', 0.35 * k); rot(m, 'lowerarm_r', 'x', 0.35 * k);
 }
 
 // ---- skill moves: hand-keyed leg work, timed to the ball path scripted in match.updateSkill ----

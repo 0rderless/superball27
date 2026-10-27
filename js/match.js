@@ -5,6 +5,7 @@ import { Ball } from './ball.js';
 import { advanceGait, slotDistance, planTouch, ROLL_DECEL, FOOT_REACH, exposure, tackleOutcome } from './dribble.js';
 import { foulChance, fromBehind, cardFor, restartForFoul, wallSpots, isDogso, secondLastX, offsidePosition } from './rules.js';
 import { aimCurl, fly } from './setpiece.js';
+import { CELEB, pickCeleb, celebLength } from './celebrations.js';
 
 const V3 = THREE.Vector3;
 const { HL, HW, GW, GH, GD } = F;
@@ -47,7 +48,7 @@ class Player {
     match.scene.add(this.model.root);
     this.a = {
       speed: 0, phase: Math.random() * 6, kickT: -1, kickPow: 0.5, tackleT: -1, slideT: -1, diveT: -1, diveSide: 1, diveHigh: false,
-      headerT: -1, throwT: -1, throwReady: false, celebrate: 0, celebrateStyle: 0, sad: 0, hold: false, ready: false,
+      headerT: -1, throwT: -1, throwReady: false, celebrate: 0, celebrateStyle: 0, celebKind: null, celebT: -1, celebClipName: null, sad: 0, hold: false, ready: false,
       hitT: -1, hitBig: false, touchT: -1, touchSide: 0, touchFoot: 'R', gait: Math.random(), strike: null, skillT: -1, skillType: 'tap', skillSide: 1, moveAngle: 0, turnRate: 0, celebClip: 0, sadClip: 0,
     };
     this.busy = 0;
@@ -73,6 +74,7 @@ class Player {
     this.holdT = 0;
     this.save = null;
     this.lastKickSeen = -1;
+    this.ms = { goals: 0, assists: 0, shots: 0, onTarget: 0, passes: 0, tackles: 0, saves: 0, conceded: 0, yellow: 0, red: 0 };
   }
 
   maxSpeed(sprint) {
@@ -246,7 +248,7 @@ export class Match {
         p.fwd.set(Math.sin(p.facing), 0, Math.cos(p.facing));
         p.busy = 0; p.action = null; p.pending = null; p.recv = null; p.stun = 0; p.save = null;
         p.lockFacing = null; p.skill = null; p.drib = null; p.exposedT = 0; p.tkSeen = 0; p.containT = 0; p.pokeCD = 0;
-        p.a.celebrate = 0; p.a.sad = 0; p.a.diveT = -1; p.a.slideT = -1; p.a.kickT = -1; p.a.throwReady = false; p.a.hold = false;
+        p.a.celebrate = 0; p.a.celebKind = null; p.a.celebT = -1; p.a.celebClipName = null; p.a.sad = 0; p.a.diveT = -1; p.a.slideT = -1; p.a.kickT = -1; p.a.throwReady = false; p.a.hold = false;
       });
     }
     const st = kickTeam.striker, partner = kickTeam.byRoles(ATTACK_ORDER, st);
@@ -306,7 +308,7 @@ export class Match {
       if (ph === 'restart') this.updateRestart(dt);
     } else if (ph === 'goal') {
       this.celebrationAI(dt);
-      if (this.phaseT > 3.4 && !this._transition) {
+      if (this.phaseT > this.celebEnd() && !this._transition) {
         this._transition = true;
         // celebration, then the replay, then kick-off
         this.hooks.fade(() => { this._transition = false; if (!this.startReplay()) this.setupKickoff(this.concede); });
@@ -982,7 +984,7 @@ export class Match {
     if (k.setpiece) for (const q of p.team.opp.players) if (q.wall) q.a.headerT = 0; // the wall jumps
     this.guarantee = k.guarantee ? { to: k.guarantee, id: this.kickId, t: 0 } : null;
     this.sound.kick(k.power);
-    if (k.kind === 'shot') { this.stats[p.team.key].shots++; if (k.mode === 'shot' && k.power > 0.4) this.say('shot', { n: p.name }, 1); }
+    if (k.kind === 'shot') { this.stats[p.team.key].shots++; p.ms.shots++; if (k.mode === 'shot' && k.power > 0.4) this.say('shot', { n: p.name }, 1); }
   }
 
   // ---------------------------------------------------------------- skill moves
@@ -1173,6 +1175,7 @@ export class Match {
     if (this.maybeFoul(p, o, { slide, missed: false, bodyContact: contact })) return;
     o.stun = slide ? 0.9 : 0.45;
     o.a.hitT = 0; o.a.hitBig = slide;
+    p.ms.tackles++;
     if (res === 'win' && !slide) { this.gainBall(p, false); this.sound.kick(0.3); }
     else this.knockLoose(o, p, rand(3, 6));
     if (p.team.isUser) { this.hooks.event('WON IT!'); this.say('tackle', { n: p.name }, 1); }
@@ -1182,6 +1185,11 @@ export class Match {
   gainBall(p, hands, silent = false) {
     const ball = this.ball;
     if (this.offsideTouch(p)) return;
+    const lk = this.lastKick;
+    if (lk.by && lk.by !== p && lk.team === p.team && (lk.kind === 'pass' || lk.kind === 'throw') && this._passCounted !== lk.id) {
+      this._passCounted = lk.id; lk.by.ms.passes++;
+      this.assist = { by: lk.by, to: p };
+    } else if (!this.assist || this.assist.to !== p) this.assist = null;
     ball.owner = p;
     ball.held = !!hands;
     p.drib = null; // first touch is worked out from the incoming ball (see dribble)
@@ -1770,10 +1778,19 @@ export class Match {
     const lt = this.lastTouch;
     const own = lt && lt.team !== team;
     this.scorer = own || !lt ? team.striker : lt;
+    if (!own && lt) {
+      lt.ms.goals++;
+      if (this.assist && this.assist.to === lt && this.assist.by.team === team) this.assist.by.ms.assists++;
+    }
+    this.assist = null;
+    team.opp.gk.ms.conceded++;
+    for (const q of team.opp.players) if (q.role !== 'GK') q.ms.conceded++;
     if (this.onCounted !== this.lastKick.id && this.lastKick.team === team) { this.onCounted = this.lastKick.id; this.stats[team.key].on++; }
     this.restart = null;
     this.ball.owner = null;
     this.hooks.hint('');
+    // your scorer does your celebration (Settings, or tap one after the goal); theirs pick one
+    this.celeb = { kind: pickCeleb(team.isUser ? this.settings.celebration : 'random'), t: 0, pick: team.isUser && !own ? 1.4 : 0 };
     this.hooks.goal(team, own ? `${lt.name} (OG)` : this.scorer.name, own);
     this.say(own ? 'ownGoal' : team.isUser ? 'goalHome' : 'goalAway', { n: this.scorer.name, s: this.scoreLine(), m: ordinal(Math.max(1, Math.ceil(this.minute))) }, 3);
     if (team.isUser) this.sound.cheer(); else { this.sound.swell(0.4, 3, 700); this.sound.ooh(); }
@@ -1789,6 +1806,7 @@ export class Match {
   }
 
   setupKickoff(team) {
+    this.celeb = null;
     this.placeKickoff(team);
     this.phase = 'restart';
     this.phaseT = 0;
@@ -1964,6 +1982,7 @@ export class Match {
     const key = p.team.key;
     if (card === 'yellow') {
       p.yellows = (p.yellows || 0) + 1;
+      p.ms.yellow++;
       this.stats[key].yellows++;
       if (p.yellows < 2) {
         this.hooks.banner('YELLOW CARD', p.name, 2200, 'card-yellow');
@@ -1974,6 +1993,7 @@ export class Match {
     }
     if (p.isGK) { this.hooks.banner('YELLOW CARD', p.name, 2200, 'card-yellow'); return; } // keepers stay on (no sub keeper)
     this.stats[key].reds++;
+    p.ms.red++;
     this.hooks.banner('RED CARD', `${p.name}${p.yellows >= 2 ? ' · second yellow' : ''} — off!`, 2800, 'card-red');
     this.say('red', { n: p.name }, 3);
     this.sendOff(p);
@@ -2626,7 +2646,7 @@ export class Match {
     gk.lastKickSeen = this.kickId;
     const onTarget = Math.abs(cross.z) < GW + 0.15 && cross.y < GH + 0.15;
     if (!onTarget) return;
-    if (this.lastKick.team === team.opp && this.lastKick.kind === 'shot' && this.onCounted !== this.lastKick.id) { this.onCounted = this.lastKick.id; this.stats[team.opp.key].on++; }
+    if (this.lastKick.team === team.opp && this.lastKick.kind === 'shot' && this.onCounted !== this.lastKick.id) { this.onCounted = this.lastKick.id; this.stats[team.opp.key].on++; if (this.lastKick.by) this.lastKick.by.ms.onTarget++; }
     let gp = cross, tg = tc;
     for (let i = 0; i < PRED_N; i++) if (this.pred[i].x * s >= gk.pos.x * s - 0.2) { gp = this.pred[i]; tg = (i + 1) * PRED_DT; break; }
     const lateral = gp.z - gk.pos.z;
@@ -2700,6 +2720,7 @@ export class Match {
     if (!sv.willSave || ball.owner) return;
     if (Math.abs(ball.pos.x - gk.pos.x) > 0.9 || Math.abs(ball.pos.z - gk.pos.z) > (gk.action === 'dive' ? 1.6 : 1.0) || ball.pos.y > 2.8) return;
     gk.save = null;
+    gk.ms.saves++;
     this.lastTouch = gk;
     this.kickId++;
     this.lastKick = { kind: 'save', team: gk.team, id: this.kickId, by: gk };
@@ -2740,12 +2761,9 @@ export class Match {
     const sc = this.scorer;
     const team = sc.team;
     for (const p of this.players) {
-      p.busy = Math.min(p.busy, 0);
+      if (!(p === sc && p.a.celebKind)) p.busy = Math.min(p.busy, 0);
       if (p === sc) {
-        const d = p.goTo(this.celebSpot, p.maxSpeed(true) * 0.9, 2);
-        p.a.celebrate = Math.min(1, p.a.celebrate + dt * 2);
-        p.faceTo = null;
-        if (d < 1) p.a.celebrateStyle = 1;
+        this.scorerCelebration(p, dt);
       } else if (p.team === team && !p.isGK) {
         const d = hdist(p.pos, sc.pos);
         const t = sc.pos.clone().add(new V3(Math.sin(p.idx * 2.1) * 2, 0, Math.cos(p.idx * 2.1) * 2));
@@ -2763,6 +2781,54 @@ export class Match {
         p.a.celebrateStyle = 1;
       }
     }
+  }
+
+  // the run-up: the routine's own, or longer while you get the chance to pick one
+  celebRun() { const c = this.celeb; return Math.max(CELEB[c.kind].run, c.pick || 0); }
+  celebEnd() {
+    const c = this.celeb;
+    if (!c) return 3.4;
+    return c.kind === 'aeroplane' ? Math.max(3.4, c.pick + 2) : Math.min(6.5, Math.max(celebLength(c.kind), this.celebRun() + CELEB[c.kind].dur + 0.4));
+  }
+  // everyone who played (sent-off players too), for ratings and the player of the match
+  matchPlayers() {
+    return [...this.players, ...this.sentOff].map(p => ({ name: p.name, role: p.role, team: p.team.key, num: p.num, data: p.data, ms: p.ms }));
+  }
+
+  // pick the celebration while he's still running to the fans
+  chooseCeleb(kind) {
+    const c = this.celeb;
+    if (this.phase !== 'goal' || !c || !CELEB[kind] || c.t >= this.celebRun()) return false;
+    c.kind = kind;
+    return true;
+  }
+
+  scorerCelebration(p, dt) {
+    const c = this.celeb, def = CELEB[c.kind], a = p.a;
+    c.t += dt;
+    p.faceTo = null;
+    if (c.kind === 'aeroplane' || c.t < this.celebRun()) {
+      // the run to the fans (arms out for the aeroplane)
+      const d = p.goTo(this.celebSpot, p.maxSpeed(true) * 0.9, 2);
+      a.celebrate = Math.min(1, a.celebrate + dt * 2);
+      a.celebrateStyle = c.kind === 'aeroplane' ? 0 : 2;
+      if (c.kind === 'aeroplane' && d < 1) a.celebrateStyle = 1;
+      return;
+    }
+    const t = c.t - this.celebRun();
+    if (a.celebKind !== c.kind) {
+      // the routine starts
+      a.celebKind = c.kind; a.celebT = 0;
+      a.celebClipName = def.clip || null;
+      a.celebrateStyle = def.clip ? 1 : 2;
+      if (c.kind === 'slide') { p.action = 'kneeslide'; p.busy = 9; p.actionT = 0; p.lockFacing = p.facing; p.vel.setLength(Math.max(6.5, p.vel.length())); }
+      if (c.kind === 'siu') { p.lockFacing = p.facing; p.busy = 9; }
+    }
+    if (c.kind === 'siu' && a.celebT < 0.98 && t >= 0.98) this.sound.cheer(); // the crowd roar the landing
+    a.celebT = t;
+    a.celebrate = 1;
+    if (c.kind !== 'slide') p.desired.set(0, 0, 0);
+    else p.desired.copy(p.vel);
   }
 
   idleAI() {
@@ -2810,13 +2876,13 @@ export class Match {
       }
       if (p.isGK && p.save) this.gkSaveContact(p);
 
-      const free = p.action !== 'slide' && p.action !== 'dive';
+      const free = p.action !== 'slide' && p.action !== 'dive' && p.action !== 'kneeslide';
       if (p.stun > 0) p.desired.multiplyScalar(0.25);
       if (free) {
         if (ball.owner === p && p.drib) this.collectSteer(p);
         this.locomote(p, dt, ball.owner === p);
       } else {
-        const fr = p.action === 'slide' ? 7 : (p.actionT > 0.55 ? 14 : 1.5);
+        const fr = p.action === 'kneeslide' ? 4.2 : p.action === 'slide' ? 7 : (p.actionT > 0.55 ? 14 : 1.5);
         const sp = Math.hypot(p.vel.x, p.vel.z);
         if (sp > 0) { const ns = Math.max(0, sp - fr * dt); p.vel.x *= ns / sp; p.vel.z *= ns / sp; }
       }

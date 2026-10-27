@@ -749,3 +749,39 @@ input, select, textarea { font-size: 16px !important; -webkit-user-select: text;
 #banner.card-yellow .b1::before { background: #ffd21f; }
 #banner.card-red .b1::before { background: #e3102c; }
 #banner.card-red .b2 { background: #b30d24; }
+/* celebration picker, right after you score */
+.celeb-pick { position: fixed; left: 50%; bottom: calc(18px + var(--sb)); transform: translate(-50%, 20px); display: flex; gap: 6px; padding: 6px; border-radius: 14px; background: rgba(6,12,32,.82); border: 1px solid var(--line-2); opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; z-index: 20; }
+.celeb-pick.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.celeb-pick button { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 58px; padding: 6px 6px 5px; border-radius: 10px; background: var(--glass-2); border: 1px solid var(--line); color: var(--text); font: 700 10.5px var(--ui); }
+.celeb-pick button i { font-style: normal; font-size: 22px; line-height: 1; }
+.celeb-pick button.on { outline: 2px solid var(--cyan); background: rgba(69,224,255,.18); }
+/* player of the match + ratings */
+#ft-potm { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 14px; text-align: left; background: linear-gradient(100deg, rgba(255,210,31,.18), rgba(255,210,31,.04)); border: 1px solid rgba(255,210,31,.45); }
+#ft-potm:empty { display: none; }
+.potm-face { width: 44px; height: 44px; flex: none; border-radius: 50%; overflow: hidden; background: rgba(255,255,255,.08); }
+.potm-face svg { width: 100%; height: 100%; }
+.potm-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.potm-txt small { font: 800 10px var(--ui); letter-spacing: 1.5px; color: #ffd21f; }
+.potm-txt b { font-family: var(--display); font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.potm-txt span { font-size: 12px; color: var(--muted); font-weight: 600; }
+.potm-rt { flex: none; font-family: var(--display); font-size: 22px; padding: 4px 9px; border-radius: 9px; background: #ffd21f; color: #1a1300; }
+#ft-ratings { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+#ft-ratings .rt { flex: none; display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 3px 8px 3px 3px; border-radius: 8px; background: rgba(255,255,255,.06); color: #dbe5ff; white-space: nowrap; }
+#ft-ratings .rt b { font-family: var(--display); font-size: 12.5px; padding: 1px 5px; border-radius: 5px; background: rgba(255,255,255,.12); }
+#ft-ratings .rt.hi b { background: #19c37d; color: #03140c; }
+#ft-ratings .rt.ok b { background: #8fd14f; color: #0d1a02; }
+#ft-ratings .rt.lo b { background: #ff6b5a; color: #1d0300; }
+#ft-ratings .rt.off { opacity: .55; text-decoration: line-through; }
+/* landscape phones: two columns so the buttons never scroll away */
+@media (orientation: landscape) and (max-height: 560px) {
+  .result-card { width: min(880px, 96vw); grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 18px; align-items: center;
+    grid-template-areas: "tag tag" "final stats" "msg stats" "potm stats" "rewards ratings" "row row"; }
+  .result-card .rc-tag { grid-area: tag; justify-self: center; }
+  .result-card .final { grid-area: final; }
+  #ft-msg { grid-area: msg; }
+  #ft-potm { grid-area: potm; }
+  #ft-stats { grid-area: stats; gap: 5px; }
+  #ft-ratings { grid-area: ratings; }
+  .result-card .rewards { grid-area: rewards; }
+  .result-card .row { grid-area: row; }
+}

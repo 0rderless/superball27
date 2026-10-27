@@ -10,12 +10,14 @@ import { CLUBS, teamConfig, crestSVG, zorpCrestSVG } from './clubs.js';
 import * as SQ from './squad.js';
 import { startCloud } from './cloud.js';
 import { chooseKits, PATTERNS, KIT_SLOTS } from './kits.js';
+import { CELEBS } from './celebrations.js';
+import { rating, playerOfMatch, summary } from './ratings.js';
 import { card, clubCard, avatar, cardView, rowsFor } from './cards.js';
 import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 27; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 28; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 // cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
 const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
@@ -33,7 +35,7 @@ const weakDevice = (navigator.hardwareConcurrency || 4) <= 4 && /Android/i.test(
 const legacyAssist = store.get('assist', 'on') !== 'off';
 const DEFAULTS = {
   difficulty: 'pro', minutes: 6, camera: 'broadcast', camZoom: 100, graphics: weakDevice ? 'low' : 'high',
-  passAssist: legacyAssist, autoSwitch: legacyAssist, autoSprint: true, defAssist: true, dribAssist: true, offside: true,
+  passAssist: legacyAssist, autoSwitch: legacyAssist, autoSprint: true, defAssist: true, dribAssist: true, offside: true, celebration: 'random',
   volume: 90, crowd: 100, sound: true, commentary: true,
   radar: true, fps: false, btnSize: 1, vibration: true, joyFixed: false,
 };
@@ -160,12 +162,31 @@ const hooks = {
     if (stadium) stadium.confetti(c.x, c.z, team.isUser ? ['#1d5cff', '#ffffff', '#ffd21f', '#4f86ff'] : ['#e0202a', '#ffd23f', '#8e0a12']);
     hooks.banner('GOAL!', `${name}  ${match.home.score} - ${match.away.score}`, 3300, team.isUser ? 'home' : 'away');
     vibrate(team.isUser ? [60, 40, 120] : 40);
+    if (team.isUser && !own) showCelebPick();
   },
   fullTime() {
     hooks.banner('FULL TIME', `${match.home.cfg.name} ${match.home.score} - ${match.away.score} ${match.away.cfg.name}`, 2600);
     setTimeout(showResult, 2800);
   },
 };
+
+// after you score: tap a celebration while he runs to the fans
+let celebPickTimer = 0;
+document.body.appendChild($('celeb-pick')); // above the touch controls, so a tap picks rather than moves
+function showCelebPick() {
+  const el = $('celeb-pick');
+  el.innerHTML = CELEBS.map(c => `<button data-celeb="${c.key}" class="${c.key === match.celeb.kind ? 'on' : ''}"><i>${c.icon}</i><span>${c.name}</span></button>`).join('');
+  el.classList.add('show');
+  clearTimeout(celebPickTimer);
+  celebPickTimer = setTimeout(() => el.classList.remove('show'), 1400);
+}
+$('celeb-pick').addEventListener('pointerdown', e => {
+  const b = e.target.closest('[data-celeb]');
+  if (!b || !match || !match.chooseCeleb(b.dataset.celeb)) return;
+  e.stopPropagation();
+  for (const x of $('celeb-pick').children) x.classList.toggle('on', x === b);
+  setTimeout(() => $('celeb-pick').classList.remove('show'), 250);
+});
 
 // ---------------------------------------------------------------- state
 let match = null;
@@ -767,7 +788,22 @@ function showResult() {
     [st.home.shots, 'Shots', st.away.shots, ''],
     [st.home.on, 'On target', st.away.on, ''],
     [st.home.passes, 'Passes', st.away.passes, ''],
+    [st.home.fouls, 'Fouls', st.away.fouls, ''],
   ];
+  if (st.home.yellows + st.away.yellows + st.home.reds + st.away.reds) rows.push([st.home.yellows + st.home.reds, 'Cards', st.away.yellows + st.away.reds, '']);
+  if ((st.home.offsides || 0) + (st.away.offsides || 0)) rows.push([st.home.offsides || 0, 'Offsides', st.away.offsides || 0, '']);
+  // player of the match, and your team's ratings
+  const winner = h > a ? 'home' : a > h ? 'away' : null;
+  const all = match.matchPlayers();
+  const potm = playerOfMatch(all, { winner });
+  if (potm) {
+    const kit = TEAMS[potm.team].kit;
+    $('ft-potm').innerHTML = `<div class="potm-face">${avatar(potm.data, kit.shirt, kit.trim)}</div>
+      <div class="potm-txt"><small>PLAYER OF THE MATCH</small><b>${potm.name}</b><span>${potm.team === 'home' ? 'ZorpFC' : opponent.name} · ${summary(potm.ms, potm.role)}</span></div>
+      <div class="potm-rt">${potm.rating.toFixed(1)}</div>`;
+  }
+  const mine = all.filter(p => p.team === 'home').map(p => ({ ...p, r: rating(p.ms, { role: p.role, won: winner === 'home', lost: winner === 'away' }) })).sort((x, y) => y.r - x.r);
+  $('ft-ratings').innerHTML = mine.map(p => `<span class="rt ${p.r >= 8 ? 'hi' : p.r >= 6.5 ? 'ok' : p.r < 5.5 ? 'lo' : ''}${p.ms.red ? ' off' : ''}"><b>${p.r.toFixed(1)}</b>${p.name.split(' ').slice(-1)[0]}</span>`).join('');
   $('ft-stats').innerHTML = rows.map(([hv, label, av, u]) => {
     const t = (hv + av) || 1;
     return `<div class="st-row"><span>${hv}${u}</span><div class="bar"><i class="h" style="width:${hv / t * 100}%"></i><i class="a" style="width:${av / t * 100}%"></i><span>${label}</span></div><span>${av}${u}</span></div>`;
@@ -882,6 +918,7 @@ const SCHEMA = [
   { tab: 'Gameplay', key: 'autoSprint', label: 'Auto sprint', desc: 'Push the joystick to the edge to sprint', type: 'toggle' },
   { tab: 'Gameplay', key: 'dribAssist', label: 'Dribble assist', desc: 'Closer ball control and quicker turns for your players', type: 'toggle' },
   { tab: 'Gameplay', key: 'offside', label: 'Offside', desc: 'The linesman flags runners caught beyond the last defender', type: 'toggle' },
+  { tab: 'Gameplay', key: 'celebration', label: 'Celebration', desc: 'What your scorer does (or tap one right after you score)', type: 'seg', options: [['random', 'Random'], ...CELEBS.map(c => [c.key, c.name])] },
   { tab: 'Gameplay', key: 'defAssist', label: 'Defence assist', desc: 'Hold SPRINT (no stick) to press and contain the man on the ball', type: 'toggle' },
   { tab: 'Camera', key: 'camera', type: 'cams' },
   { tab: 'Camera', key: 'camZoom', label: 'Camera distance', desc: 'Closer or further than the preset', type: 'range', min: 80, max: 125, step: 5, unit: '%' },
