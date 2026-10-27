@@ -8,13 +8,17 @@ import { Sound } from './audio.js';
 import { F, DIFFICULTY, DIFF_KEYS, TEAMS, FORMATIONS } from './config.js';
 import { CLUBS, teamConfig, crestSVG, zorpCrestSVG } from './clubs.js';
 import * as SQ from './squad.js';
+import { startCloud } from './cloud.js';
 import { card, clubCard, avatar, cardView, rowsFor } from './cards.js';
 import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 23; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 24; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
+// cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
+const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
+startCloud({ onStatus: s => document.querySelectorAll('.cloud-st').forEach(e => { e.textContent = CLOUD_TEXT[s] || ''; }) });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
 
