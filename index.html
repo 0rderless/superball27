@@ -75,7 +75,7 @@
         <div class="load-tip" id="load-tip"></div>
         <div class="tap-start" id="tap-start">TAP ANYWHERE TO START</div>
       </div>
-      <div class="title-ver">v1.3 · Ontronop Games</div>
+      <div class="title-ver"><span class="build-no">Build 20</span> · Ontronop Games</div>
     </div>
   </div>
 
@@ -143,6 +143,14 @@
     <main class="page hidden" id="page-shop">
       <div class="shop-bar">
         <div class="seg shop-filter" id="shop-filter"></div>
+        <input class="shop-search" id="shop-search" type="search" placeholder="Search players" autocomplete="off">
+        <select class="shop-sort" id="shop-sort">
+          <option value="ovr-desc">Rating: high → low</option>
+          <option value="ovr-asc">Rating: low → high</option>
+          <option value="price-desc">Price: high → low</option>
+          <option value="price-asc">Price: low → high</option>
+          <option value="name">Name A–Z</option>
+        </select>
         <button class="daily editor-btn" id="editor-btn"><svg class="ico"><use href="#i-sliders"/></svg><span>Editor</span></button>
         <button class="daily" id="daily-btn"><svg class="ico"><use href="#i-gift"/></svg><span id="daily-txt">Daily reward</span></button>
       </div>
@@ -251,7 +259,7 @@
   <!-- ============ SETTINGS ============ -->
   <div id="settings" class="modal hidden">
     <div class="modal-card">
-      <div class="modal-head"><h2>SETTINGS</h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
+      <div class="modal-head"><h2>SETTINGS <small class="build-no">Build 20</small></h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
       <div class="set-body">
         <nav class="set-tabs" id="set-tabs"></nav>
         <div class="set-pane" id="set-pane"></div>

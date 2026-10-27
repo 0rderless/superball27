@@ -716,3 +716,13 @@ button:active { transform: scale(.97); }
 .sw { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); }
 .sw.on { outline: 3px solid var(--cyan); outline-offset: 2px; }
 @media (max-height: 430px) { .ed-left { width: 150px; } .ed-preview .pcard { font-size: 8px; } .ed-form { gap: 4px; } }
+.modal-head h2 small.build-no { font: 600 12px var(--ui); color: var(--muted); letter-spacing: 0; margin-left: 8px; font-style: normal; }
+.shop-search, .shop-sort { min-width: 0; padding: 7px 10px; border-radius: 6px; background: var(--glass); color: var(--text); border: 1px solid var(--line-2); font: 600 13px var(--ui); user-select: text; -webkit-user-select: text; touch-action: auto; }
+.shop-search { flex: 1; max-width: 220px; }
+.shop-empty { grid-column: 1 / -1; padding: 30px; text-align: center; color: var(--muted); font-weight: 700; }
+.bottom-nav button { transition: none; }
+.shop-bar { flex-wrap: nowrap; }
+.shop-bar .shop-filter { flex: none; }
+.shop-search { flex: 1 1 140px; max-width: 240px; }
+.shop-sort { flex: none; }
+.editor-btn { margin-left: 0; }

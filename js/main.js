@@ -13,6 +13,8 @@ import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const BUILD = 20; // shown on the title screen and in settings, so you can tell which version is running
+document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
 
@@ -337,7 +339,7 @@ function updateCoins() {
   $('coins').textContent = SQ.INFINITE_COINS ? '∞' : c.toLocaleString('en-US');
   if (coinShown !== null && c !== coinShown) { const el = $('coins').parentElement; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
   coinShown = c;
-  $('shop-dot').classList.toggle('on', SQ.dailyReady());
+  $('shop-dot').classList.toggle('on', !SQ.INFINITE_COINS && SQ.dailyReady());
 }
 let toastTimer = 0;
 function toast(msg, icon = 'check') {
@@ -423,18 +425,29 @@ let shopFilter = 'all', confirmId = null;
 function renderShop() {
   seg($('shop-filter'), FILTERS, () => shopFilter, v => { shopFilter = v; confirmId = null; renderShop(); });
   const pr = SQ.profile();
-  const items = SQ.SHOP.filter(id => shopFilter === 'all' || GROUP[SQ.DB[id].pos] === shopFilter);
+  const q = ($('shop-search').value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const plain = t => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u00a0/g, ' ');
+  const sorts = {
+    'ovr-desc': (a, b) => SQ.ovr(b) - SQ.ovr(a), 'ovr-asc': (a, b) => SQ.ovr(a) - SQ.ovr(b),
+    'price-desc': (a, b) => SQ.DB[b].price - SQ.DB[a].price, 'price-asc': (a, b) => SQ.DB[a].price - SQ.DB[b].price,
+    name: (a, b) => plain(SQ.DB[a].name).localeCompare(plain(SQ.DB[b].name)),
+  };
+  const items = SQ.SHOP.filter(id => (shopFilter === 'all' || GROUP[SQ.DB[id].pos] === shopFilter) && (!q || plain(SQ.DB[id].name).includes(q) || SQ.DB[id].pos.toLowerCase() === q))
+    .sort(sorts[$('shop-sort').value] || sorts['ovr-desc']);
   $('shop-grid').innerHTML = items.map(id => {
     const p = SQ.DB[id], owned = pr.owned.includes(id);
     const btn = owned ? `<button class="buy owned" disabled><svg class="ico"><use href="#i-check"/></svg>OWNED</button>`
       : confirmId === id ? `<button class="buy confirm" data-buy="${id}">CONFIRM</button>`
-      : `<button class="buy" data-buy="${id}" ${!SQ.INFINITE_COINS && pr.coins < p.price ? 'disabled' : ''}>${coin(p.price)}</button>`;
+      : `<button class="buy" data-buy="${id}" ${!SQ.INFINITE_COINS && pr.coins < p.price ? 'disabled' : ''}>${SQ.INFINITE_COINS ? 'SIGN' : coin(p.price)}</button>`;
     return `<div class="shop-item">${card(id)}${btn}</div>`;
-  }).join('');
+  }).join('') || `<div class="shop-empty">No players match "${$('shop-search').value.replace(/</g, '&lt;')}"</div>`;
   const d = $('daily-btn');
+  d.classList.toggle('hidden', SQ.INFINITE_COINS); // nothing to claim with unlimited coins
   d.disabled = !SQ.dailyReady();
   $('daily-txt').textContent = SQ.dailyReady() ? 'Claim daily 750' : 'Daily claimed';
 }
+$('shop-search').addEventListener('input', () => renderShop());
+$('shop-sort').addEventListener('change', () => renderShop());
 $('shop-grid').addEventListener('click', e => {
   const b = e.target.closest('[data-buy]');
   if (!b) return;
@@ -1169,7 +1182,11 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then(r => r.update()).catch(() => {}));
+  // a new version took over: reload once so it's what you're playing
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
 }
 
 // debug handle for automated testing

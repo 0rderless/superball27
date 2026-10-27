@@ -1,5 +1,5 @@
 // Offline cache for the home-screen app. Bump VERSION when shipping changes.
-const VERSION = 'sb27-v19';
+const VERSION = 'sb27-v20';
 const ASSETS = [
   './', './index.html', './manifest.json', './css/style.css',
   './js/main.js', './js/match.js', './js/model.js', './js/ball.js', './js/stadium.js', './js/input.js', './js/audio.js', './js/config.js', './js/commentary.js', './js/squad.js', './js/cards.js', './js/clubs.js', './js/dribble.js',
@@ -18,7 +18,8 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    fetch(e.request).then(res => {
+    // same-origin files always revalidate, so a new version shows up on the next launch
+    fetch(e.request, new URL(e.request.url).origin === location.origin ? { cache: 'no-cache' } : {}).then(res => {
       if (res && (res.ok || res.type === 'opaque')) {
         const copy = res.clone();
         caches.open(VERSION).then(c => c.put(e.request, copy));
