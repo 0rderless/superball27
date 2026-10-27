@@ -129,8 +129,10 @@ export class Input {
       ShiftLeft: 'sprint', ShiftRight: 'sprint', KeyI: 'skill', KeyE: 'skill',
     };
     const highKeys = new Set(['KeyU', 'KeyO', 'KeyY']);
+    // typing in a text box (player editor, store search) is never a game control
+    const typing = e => { const t = e.target; return t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)); };
     window.addEventListener('keydown', e => {
-      if (e.repeat) return;
+      if (e.repeat || typing(e)) return;
       this.keys.add(e.code);
       const k = map[e.code];
       if (k) {
@@ -146,6 +148,7 @@ export class Input {
     });
     window.addEventListener('keyup', e => {
       this.keys.delete(e.code);
+      if (typing(e)) return;
       const k = map[e.code];
       if (k) { const st = this.b[k]; if (st.down) { st.down = false; st.released = true; } }
     });

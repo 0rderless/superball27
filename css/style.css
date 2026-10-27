@@ -732,3 +732,5 @@ button:active { transform: scale(.97); }
 .page { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); }
 #page-shop { grid-template-columns: minmax(0, 1fr); }
 .bench .bench-card { flex: none; }
+/* text boxes: iPhone zooms the page into any field under 16px, and needs text selection allowed */
+input, select, textarea { font-size: 16px !important; -webkit-user-select: text; user-select: text; touch-action: manipulation; }

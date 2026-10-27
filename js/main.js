@@ -13,7 +13,7 @@ import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 21; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 22; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
@@ -941,6 +941,7 @@ document.addEventListener('visibilitychange', () => {
   else if (state !== 'menu') requestWakeLock();
 });
 window.addEventListener('keydown', e => {
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   if (e.code === 'Escape' || e.code === 'KeyP') state === 'game' ? pause() : state === 'paused' && resume();
 });
 window.addEventListener('pointerdown', () => {
