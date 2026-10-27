@@ -17,12 +17,13 @@ import { DrillRun } from './drill-run.js';
 import * as MD from './modes.js';
 import { sortTable, topScorers } from './league.js';
 import { ROUND_NAMES } from './cup.js';
+import { teamFacts } from './facts.js';
 import { card, clubCard, avatar, cardView, rowsFor } from './cards.js';
 import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 31; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 32; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 // cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
 const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
@@ -73,7 +74,7 @@ const TIPS = [
   'Assisted passes follow your teammate wherever he runs.',
   'Try the Pro camera in Settings for an end-to-end view.',
   'Tap the screen to skip a goal replay.',
-  'Push the joystick to the edge to sprint — ZorpFC never tire.',
+  'Hold SPRINT for top speed (stick at the edge is a quicker run) — ZorpFC never tire.',
   'Defending: hold SPRINT to press the man on the ball.',
 ];
 const tip = () => TIPS[(Math.random() * TIPS.length) | 0];
@@ -421,13 +422,14 @@ function renderSquad() {
   }
   const p = SQ.DB[focus], a = SQ.attrs(focus);
   const keys = p.pos === 'GK' ? SQ.UPGRADABLE.gk : SQ.UPGRADABLE.field;
-  det.innerHTML = `${card(focus)}<div class="sd-info"><h3>${p.name}</h3><div class="sub">${p.pos} · #${p.num} · ${SQ.ovr(focus)} OVR${p.star ? ' · SUPERSTAR' : ''}</div>
+  det.innerHTML = `${card(focus)}<div class="sd-info"><div class="sd-top"><h3>${p.name}</h3><button class="sd-edit" data-edit="${focus}"><svg class="ico"><use href="#i-sliders"/></svg>Edit</button></div><div class="sub">${p.pos} · #${p.num} · ${SQ.ovr(focus)} OVR${p.star ? ' · SUPERSTAR' : ''}</div>
     <div class="attr-list">${keys.map(k => {
       const v = a[k], lv = SQ.attrLevel(focus, k), cost = SQ.trainCost(focus, k), can = SQ.canTrain(focus, k);
       return `<div class="attr">${SQ.ATTR_NAME[k]}<i style="--v:${v}%"><u style="--b:${v - lv}%;--u:${lv}%"></u></i><b>${v}</b>${can
         ? `<button data-train="${k}" ${SQ.profile().coins < cost ? 'disabled' : ''}><svg class="ico"><use href="#i-coin"/></svg>${cost >= 1000 ? (cost / 1000).toFixed(1) + 'k' : cost}</button>`
         : '<button class="max" disabled>MAX</button>'}</div>`;
     }).join('')}</div></div>`;
+  det.querySelector('[data-edit]').addEventListener('click', () => { edLoad(focus); openModal('editor'); });
   det.querySelectorAll('[data-train]').forEach(btn => btn.addEventListener('click', () => {
     const k = btn.dataset.train;
     if (SQ.train(focus, k)) {
@@ -533,10 +535,13 @@ function edPreview() {
 }
 function edForm() {
   const pr = SQ.profile();
-  const ids = Object.keys(SQ.DB).filter(id => pr.owned.includes(id) || SQ.SHOP.includes(id));
-  $('ed-pick').innerHTML = `<option value="">+ Create new player</option>` + ids.map(id => `<option value="${id}" ${id === edId ? 'selected' : ''}>${SQ.DB[id].name} · ${SQ.DB[id].pos} ${SQ.ovr(id)}${SQ.isCustom(id) ? ' (yours)' : SQ.isEdited(id) ? ' (edited)' : ''}</option>`).join('');
+  const opt = id => `<option value="${id}" ${id === edId ? 'selected' : ''}>${SQ.DB[id].name} · ${SQ.DB[id].pos} ${SQ.ovr(id)}${SQ.isCustom(id) ? ' (created)' : SQ.isEdited(id) ? ' (edited)' : ''}</option>`;
+  const byOvr = (a, b) => SQ.ovr(b) - SQ.ovr(a);
+  const mine = pr.owned.filter(id => SQ.DB[id]).sort(byOvr), store = SQ.SHOP.filter(id => SQ.DB[id] && !pr.owned.includes(id)).sort(byOvr);
+  $('ed-pick').innerHTML = `<option value="">+ Create a new player</option><optgroup label="Your squad (${mine.length})">${mine.map(opt).join('')}</optgroup><optgroup label="Store players">${store.map(opt).join('')}</optgroup>`;
   const sw = (key, list) => list.map((c, i) => `<button class="sw ${ed[key] === i ? 'on' : ''}" data-k="${key}" data-v="${i}" style="background:${c}"></button>`).join('');
   $('ed-form').innerHTML = `
+    <div class="ed-hint">${edId ? `Editing <b>${SQ.DB[edId].name}</b>: change anything, then Save.` : 'Creating a new player. To edit one of yours, pick him in the list on the left (or tap Edit on the Team page).'}</div>
     <label class="ed-row"><span>Name</span><input id="ed-name" maxlength="22" value="${ed.name.replace(/"/g, '&quot;')}"></label>
     <div class="ed-row"><span>Position</span><div class="ed-chips">${SQ.POSITIONS.map(p => `<button class="chip ${ed.pos === p ? 'on' : ''}" data-k="pos" data-v="${p}">${p}</button>`).join('')}</div></div>
     <label class="ed-row"><span>Number</span><input id="ed-num" type="number" min="1" max="99" value="${ed.num}"></label>
@@ -583,6 +588,9 @@ $('ed-remove').addEventListener('click', () => {
   if (tab === 'shop') renderShop(); syncMenu();
 });
 $('editor-btn').addEventListener('click', () => { edLoad(null); openModal('editor'); });
+// keep the Team page in step with edits
+$('ed-save').addEventListener('click', () => { if (tab === 'squad') renderSquad(); });
+$('ed-remove').addEventListener('click', () => { if (tab === 'squad') renderSquad(); });
 
 // ---------------------------------------------------------------- kit editor
 const KIT_FIELDS = [['shirt', 'Shirt'], ['shirt2', 'Pattern'], ['trim', 'Trim'], ['number', 'Number'], ['shorts', 'Shorts'], ['socks', 'Socks'], ['sockTop', 'Sock tops'], ['boots', 'Boots']];
@@ -987,6 +995,48 @@ function showResult() {
   ui.hud.classList.add('hidden');
 }
 
+// ---------------------------------------------------------------- match facts
+let factsTab = 'team', factsSide = 'home';
+function renderFacts(el) {
+  if (!match) return;
+  const H = match.home.cfg.short || 'ZFC', A = match.away.cfg.short;
+  const tabs = `<div class="seg facts-tabs">${[['team', 'Match facts'], ['players', 'Players'], ['timeline', 'Timeline']].map(([k, n]) => `<button data-ft="${k}" class="${factsTab === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+  let body = '';
+  if (factsTab === 'team') {
+    const st = { ...match.stats.home, goals: match.home.score }, sa = { ...match.stats.away, goals: match.away.score };
+    body = `<div class="facts-head"><span class="fh-h">${H}</span><b>${match.home.score} - ${match.away.score}</b><span class="fh-a">${A}</span></div>` +
+      teamFacts(st, sa).map(r => {
+        const t = (r.hv + r.av) || 1;
+        return `<div class="fr"><span>${r.h}</span><div class="fr-mid"><small>${r.label}</small><div class="fr-bar"><i class="h" style="width:${r.hv / t * 100}%"></i><i class="a" style="width:${r.av / t * 100}%"></i></div></div><span>${r.a}</span></div>`;
+      }).join('');
+  } else if (factsTab === 'players') {
+    const winner = match.home.score > match.away.score ? 'home' : match.away.score > match.home.score ? 'away' : null;
+    const ps = match.matchPlayers().filter(p => p.team === factsSide)
+      .map(p => ({ ...p, r: rating(p.ms, { role: p.role, won: winner === p.team, lost: !!winner && winner !== p.team }) }))
+      .sort((x, y) => y.r - x.r);
+    body = `<div class="seg facts-side"><button data-fs="home" class="${factsSide === 'home' ? 'on' : ''}">${match.home.cfg.name}</button><button data-fs="away" class="${factsSide === 'away' ? 'on' : ''}">${match.away.cfg.name}</button></div>
+      <div class="pf-wrap"><table class="pf"><thead><tr><th class="nm">Player</th><th>Rtg</th><th>G</th><th>A</th><th>Sh</th><th>xG</th><th>Passes</th><th>Tkl</th><th>Int</th><th>Sav</th><th>Skl</th><th>Km</th><th>Top</th></tr></thead><tbody>${
+      ps.map(p => { const m = p.ms; return `<tr class="${p.off ? 'off' : ''}"><td class="nm"><i>${p.num}</i>${p.name}${m.red ? ' <em class="rc"></em>' : m.yellow ? ' <em class="yc"></em>' : ''}<small>${p.role}</small></td><td><b class="rt ${p.r >= 8 ? 'hi' : p.r >= 6.5 ? 'ok' : p.r < 5.5 ? 'lo' : ''}">${p.r.toFixed(1)}</b></td><td>${m.goals}</td><td>${m.assists}</td><td>${m.shots}</td><td>${m.xg.toFixed(2)}</td><td>${m.passes}/${m.passAtt}</td><td>${m.tackles}</td><td>${m.intercepts}</td><td>${m.saves}</td><td>${m.skills}</td><td>${(m.dist / 1000).toFixed(1)}</td><td>${Math.round(m.topSpd * 3.6)}</td></tr>`; }).join('')
+    }</tbody></table></div>`;
+  } else {
+    const ev = match.events;
+    const icon = e => e.type === 'goal' ? '⚽' : e.type === 'og' ? '⚽ OG' : e.type === 'yellow' ? '<em class="yc"></em>' : e.type === 'red2' ? '<em class="yc"></em><em class="rc"></em>' : '<em class="rc"></em>';
+    body = `<div class="facts-head"><span class="fh-h">${H}</span><b>${match.home.score} - ${match.away.score}</b><span class="fh-a">${A}</span></div>` + (ev.length ? `<div class="tl">${
+      ev.map(e => `<div class="tl-row ${e.team}"><div class="tl-side">${e.team === 'home' ? `<b>${e.name}</b>${e.assist ? `<small>assist ${e.assist}</small>` : ''}` : ''}</div><div class="tl-min">${e.min}'<span>${icon(e)}</span></div><div class="tl-side">${e.team === 'away' ? `<b>${e.name}</b>${e.assist ? `<small>assist ${e.assist}</small>` : ''}` : ''}</div></div>`).join('')
+    }</div>` : '<p class="tl-empty">No goals or cards yet.</p>');
+  }
+  el.innerHTML = tabs + `<div class="facts-body">${body}</div>`;
+}
+for (const id of ['pause-facts', 'modal-facts']) {
+  $(id).addEventListener('click', e => {
+    const t = e.target.closest('[data-ft]'), sd = e.target.closest('[data-fs]');
+    if (t) factsTab = t.dataset.ft;
+    if (sd) factsSide = sd.dataset.fs;
+    if (t || sd) renderFacts($(id));
+  });
+}
+$('facts-btn').addEventListener('click', () => { renderFacts($('modal-facts')); openModal('facts-modal'); });
+
 // ---------------------------------------------------------------- pause
 function pause() {
   if (state !== 'game') return;
@@ -996,6 +1046,7 @@ function pause() {
   $('pp-score').textContent = `${match.home.score} - ${match.away.score}`;
   $('pp-time').textContent = ui.clock.textContent;
   buildCamStrip();
+  renderFacts($('pause-facts'));
   showScreen('pause');
 }
 function resume() {
@@ -1089,7 +1140,7 @@ const SCHEMA = [
   { tab: 'Gameplay', key: 'minutes', label: 'Match length', desc: 'Applies to the next match', type: 'seg', options: [[4, '4 min'], [6, '6 min'], [10, '10 min']] },
   { tab: 'Gameplay', key: 'passAssist', label: 'Pass assist', desc: 'Passes go to who you aim at and follow him', type: 'toggle' },
   { tab: 'Gameplay', key: 'autoSwitch', label: 'Auto switch', desc: 'Control the closest defender automatically', type: 'toggle' },
-  { tab: 'Gameplay', key: 'autoSprint', label: 'Auto sprint', desc: 'Push the joystick to the edge to sprint', type: 'toggle' },
+  { tab: 'Gameplay', key: 'autoSprint', label: 'Auto sprint', desc: 'Stick at the edge = quicker run. Hold SPRINT for top speed', type: 'toggle' },
   { tab: 'Gameplay', key: 'dribAssist', label: 'Dribble assist', desc: 'Closer ball control and quicker turns for your players', type: 'toggle' },
   { tab: 'Gameplay', key: 'offside', label: 'Offside', desc: 'The linesman flags runners caught beyond the last defender', type: 'toggle' },
   { tab: 'Gameplay', key: 'celebration', label: 'Celebration', desc: 'What your scorer does (or tap one right after you score)', type: 'seg', options: [['random', 'Random'], ...CELEBS.map(c => [c.key, c.name])] },
@@ -1133,7 +1184,7 @@ function applyAudio() { sound.setVolume(settings.volume / 100, settings.crowd / 
 for (const k in DEFAULTS) applySetting(k);
 
 function openModal(id) { $(id).classList.remove('hidden'); }
-function closeModals() { for (const id of ['settings', 'help', 'editor', 'kit-editor', 'drills', 'drill-result', 'season', 'cup']) $(id).classList.add('hidden'); }
+function closeModals() { for (const id of ['settings', 'help', 'editor', 'kit-editor', 'drills', 'drill-result', 'season', 'cup', 'facts-modal']) $(id).classList.add('hidden'); }
 document.querySelectorAll('.modal').forEach(m => {
   m.addEventListener('click', e => { if (m.id === 'drill-result') return; if (e.target === m || e.target.closest('[data-close]')) { m.classList.add('hidden'); if (state === 'paused') buildCamStrip(); } });
 });

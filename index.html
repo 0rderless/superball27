@@ -78,7 +78,7 @@
         <div class="load-tip" id="load-tip"></div>
         <div class="tap-start" id="tap-start">TAP ANYWHERE TO START</div>
       </div>
-      <div class="title-ver"><span class="build-no">Build 31</span> · Ontronop Games</div>
+      <div class="title-ver"><span class="build-no">Build 32</span> · Ontronop Games</div>
     </div>
   </div>
 
@@ -273,12 +273,13 @@
         <button class="mbtn danger" id="quit-btn">Quit</button>
       </div>
     </div>
+    <div class="facts-panel" id="pause-facts"></div>
   </div>
 
   <!-- ============ SETTINGS ============ -->
   <div id="settings" class="modal hidden">
     <div class="modal-card">
-      <div class="modal-head"><h2>SETTINGS <small class="build-no">Build 31</small> <small class="cloud-st"></small></h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
+      <div class="modal-head"><h2>SETTINGS <small class="build-no">Build 32</small> <small class="cloud-st"></small></h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
       <div class="set-body">
         <nav class="set-tabs" id="set-tabs"></nav>
         <div class="set-pane" id="set-pane"></div>
@@ -326,6 +327,13 @@
     <div class="modal-card season-card">
       <div class="modal-head"><h2>CUP <small id="cup-sub"></small></h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
       <div class="cup-body" id="cup-body"></div>
+    </div>
+  </div>
+
+  <div id="facts-modal" class="modal hidden">
+    <div class="modal-card season-card">
+      <div class="modal-head"><h2>MATCH FACTS</h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
+      <div class="facts-panel in-modal" id="modal-facts"></div>
     </div>
   </div>
 
@@ -379,6 +387,7 @@
       <div class="rewards" id="ft-rewards"></div>
       <div class="row">
         <button class="mbtn primary" id="again-btn">Play again</button>
+        <button class="mbtn" id="facts-btn">Match facts</button>
         <button class="mbtn" id="menu-btn">Main menu</button>
       </div>
     </div>

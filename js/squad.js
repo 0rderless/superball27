@@ -279,6 +279,8 @@ export function savePlayer(id, data) {
     pr.edits[id] = c;
     Object.assign(DB[id], c);
   }
+  // the editor sets the final numbers (it shows training already added), so training starts again
+  delete pr.upgrades[id];
   save();
   return id;
 }

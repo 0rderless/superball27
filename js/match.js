@@ -7,6 +7,7 @@ import { foulChance, fromBehind, cardFor, restartForFoul, wallSpots, isDogso, se
 import { aimCurl, fly } from './setpiece.js';
 import { CELEB, pickCeleb, celebLength } from './celebrations.js';
 import { Shootout } from './shootout.js';
+import { xg as shotXg } from './facts.js';
 
 const V3 = THREE.Vector3;
 const { HL, HW, GW, GH, GD } = F;
@@ -75,7 +76,7 @@ class Player {
     this.holdT = 0;
     this.save = null;
     this.lastKickSeen = -1;
-    this.ms = { goals: 0, assists: 0, shots: 0, onTarget: 0, passes: 0, tackles: 0, saves: 0, conceded: 0, yellow: 0, red: 0 };
+    this.ms = { goals: 0, assists: 0, shots: 0, onTarget: 0, passes: 0, passAtt: 0, tackles: 0, intercepts: 0, saves: 0, conceded: 0, yellow: 0, red: 0, xg: 0, headers: 0, skills: 0, dist: 0, topSpd: 0 };
   }
 
   maxSpeed(sprint) {
@@ -161,7 +162,9 @@ export class Match {
     this.half = 1;
     this.clock = 0;
     this.time = 0;
-    this.stats = { home: { shots: 0, on: 0, poss: 0, passes: 0, fouls: 0, yellows: 0, reds: 0 }, away: { shots: 0, on: 0, poss: 0, passes: 0, fouls: 0, yellows: 0, reds: 0 } };
+    const blank = () => ({ shots: 0, on: 0, poss: 0, passes: 0, passCmp: 0, fouls: 0, yellows: 0, reds: 0, offsides: 0, xg: 0, big: 0, blocked: 0, woodwork: 0, saves: 0, headers: 0, through: 0, long: 0, skills: 0, tackles: 0, intercepts: 0, corner: 0, freekick: 0, penalty: 0, throw: 0, goalkick: 0, dist: 0, topSpd: 0 });
+    this.stats = { home: blank(), away: blank() };
+    this.events = []; // goals and cards, for the timeline
     this.sentOff = [];
     this.adv = null;
     this.possTeam = null;
@@ -578,7 +581,8 @@ export class Match {
     if (mag > 0) {
       p.idleT = 0;
       p.manual = true;
-      const sp = p.maxSpeed(sprint) * Math.min(1, 0.3 + mag);
+      // holding SPRINT is top speed; auto sprint (stick at the edge) is only a quicker run
+      const sp = (B.sprint.down ? p.maxSpeed(true) : sprint ? p.maxSpeed(false) + (p.maxSpeed(true) - p.maxSpeed(false)) * 0.35 : p.maxSpeed(false)) * Math.min(1, 0.3 + mag);
       p.desired.copy(wdir).multiplyScalar(sp);
       p.sprint = sprint;
     } else {
@@ -872,7 +876,9 @@ export class Match {
     const power = mode === 'loft' ? 0.65 : clamp(0.25 + d / 60, 0.25, 0.8);
     const speedMul = (type === 'through' ? 1.06 : 1) * (assisted && mode === 'ground' ? 1.08 : 1);
     this.kick(p, { mode, target, angle, err, speedMul, power, kind: 'pass', recv: m, first: firstTime, guarantee: assisted && m ? m : null });
-    this.stats[team.key].passes++;
+    this.stats[team.key].passes++; p.ms.passAtt++;
+    if (type === 'through') this.stats[team.key].through++;
+    if (mode === 'loft') this.stats[team.key].long++;
     if (team.isUser && m && !m.isGK) {
       this.setControlled(m);
       m.recv.t = 0;
@@ -998,10 +1004,15 @@ export class Match {
     // no offside from a throw-in, goal kick or corner
     if (k.kind === 'throw' || this.restartKick === 'goalkick' || this.restartKick === 'corner') this.offside = null;
     else this.offsideSnapshot(p);
+    const fromRestart = this.restartKick;
     this.restartKick = null;
     if (k.setpiece) for (const q of p.team.opp.players) if (q.wall) q.a.headerT = 0; // the wall jumps
     this.guarantee = k.guarantee ? { to: k.guarantee, id: this.kickId, t: 0 } : null;
     this.sound.kick(k.power);
+    if (k.kind === 'shot' && !this.inShootout) {
+      const x = shotXg(ball.pos, p.team.attackX, { penalty: fromRestart === 'penalty' });
+      this.stats[p.team.key].xg += x; p.ms.xg += x; if (x >= 0.3) this.stats[p.team.key].big++;
+    }
     if (k.kind === 'shot' && !this.inShootout) { this.stats[p.team.key].shots++; p.ms.shots++; if (k.mode === 'shot' && k.power > 0.4) this.say('shot', { n: p.name }, 1); }
   }
 
@@ -1013,6 +1024,7 @@ export class Match {
   //   down  = sole drag-back + 180° turn                    up = rainbow flick (heel flick over the head)
   skillMove(p, type = 'tap') {
     if (p.skillCD > 0 || p.pending || p.skill) return;
+    this.stats[p.team.key].skills++; p.ms.skills++;
     const ball = this.ball;
     const f = p.fwd.clone(), l = new V3(f.z, 0, -f.x);
     // go away from the nearest defender if the move has no direction of its own
@@ -1193,7 +1205,7 @@ export class Match {
     if (this.maybeFoul(p, o, { slide, missed: false, bodyContact: contact })) return;
     o.stun = slide ? 0.9 : 0.45;
     o.a.hitT = 0; o.a.hitBig = slide;
-    p.ms.tackles++;
+    p.ms.tackles++; this.stats[p.team.key].tackles++;
     if (res === 'win' && !slide) { this.gainBall(p, false); this.sound.kick(0.3); }
     else this.knockLoose(o, p, rand(3, 6));
     if (p.team.isUser) { this.hooks.event('WON IT!'); this.say('tackle', { n: p.name }, 1); }
@@ -1206,8 +1218,14 @@ export class Match {
     const lk = this.lastKick;
     if (lk.by && lk.by !== p && lk.team === p.team && (lk.kind === 'pass' || lk.kind === 'throw') && this._passCounted !== lk.id) {
       this._passCounted = lk.id; lk.by.ms.passes++;
+      if (lk.kind === 'pass') this.stats[p.team.key].passCmp++;
       this.assist = { by: lk.by, to: p };
-    } else if (!this.assist || this.assist.to !== p) this.assist = null;
+    } else {
+      if (!this.assist || this.assist.to !== p) this.assist = null;
+      if (lk.kind === 'pass' && lk.team && lk.team !== p.team && this._passCounted !== lk.id && this.phase === 'play') {
+        this._passCounted = lk.id; this.stats[p.team.key].intercepts++; p.ms.intercepts++;
+      }
+    }
     ball.owner = p;
     ball.held = !!hands;
     p.drib = null; // first touch is worked out from the incoming ball (see dribble)
@@ -1568,6 +1586,7 @@ export class Match {
       }
       if (hit && ball.speed > 4 && this.phase === 'play') {
         this.sound.post();
+        if (this.lastKick.kind === 'shot' && this.lastKick.team) this.stats[this.lastKick.team.key].woodwork++;
         this.hooks.event('OFF THE WOODWORK!');
         this.say('post', {}, 2);
       }
@@ -1692,6 +1711,7 @@ export class Match {
       ball.vel.set(-ball.vel.x * rand(0.2, 0.4) + gauss() * 2, rand(1.5, 4), -ball.vel.z * 0.3 + gauss() * 3);
       ball.spin = 0;
       this.lastTouch = best; best.cool = 0.5;
+      if (this.lastKick.team) this.stats[this.lastKick.team.key].blocked++;
       this.kickId++;
       this.lastKick = { kind: 'block', team: best.team, id: this.kickId, by: best };
       this.sound.thud(6);
@@ -1704,6 +1724,7 @@ export class Match {
         this.lastTouch = best;
         best.cool = 0.4;
         this.sound.thud(6);
+        if (this.lastKick.kind === 'shot' && this.lastKick.team) this.stats[this.lastKick.team.key].blocked++;
         this.hooks.event('BLOCKED!');
       } else best.cool = 0.3;
     }
@@ -1712,6 +1733,7 @@ export class Match {
   header(p) {
     const ball = this.ball, team = p.team;
     if (this.offsideTouch(p)) return;
+    this.stats[team.key].headers++; p.ms.headers++;
     p.a.headerT = 0;
     p.action = 'header';
     p.busy = 0.5;
@@ -1731,7 +1753,9 @@ export class Match {
       const t = dh / vh;
       vel = new V3(dx / dh * vh, (tgt.y - ball.pos.y) / t + 0.5 * GRAVITY * t, dz / dh * vh);
       kind = 'shot';
-      this.stats[team.key].shots++;
+      this.stats[team.key].shots++; p.ms.shots++;
+      const x = shotXg(ball.pos, gx, { header: true });
+      this.stats[team.key].xg += x; p.ms.xg += x; if (x >= 0.3) this.stats[team.key].big++;
     } else if (team.along(ball.pos) < 0.42) {
       vel = new V3(team.dir * rand(10, 15), rand(5, 8), Math.sign(ball.pos.z || 1) * rand(2, 7));
     } else {
@@ -1800,6 +1824,8 @@ export class Match {
     const lt = this.lastTouch;
     const own = lt && lt.team !== team;
     this.scorer = own || !lt ? team.striker : lt;
+    this.events.push({ min: Math.max(1, Math.ceil(this.minute)), type: own ? 'og' : 'goal', team: team.key, name: own ? lt.name : this.scorer.name,
+      assist: !own && this.assist && this.assist.to === lt && this.assist.by.team === team ? this.assist.by.name : null });
     if (!own && lt) {
       lt.ms.goals++;
       if (this.assist && this.assist.to === lt && this.assist.by.team === team) this.assist.by.ms.assists++;
@@ -1869,6 +1895,7 @@ export class Match {
     const r = { type, team, taker, spot: spot.clone(), aim, wait: 0, ready: false, shooting };
     this.restart = r;
     this.possTeam = team;
+    if (!this.drill && type in this.stats[team.key]) this.stats[team.key][type]++;
     const labels = { throw: 'THROW-IN', corner: 'CORNER', goalkick: 'GOAL KICK', freekick: opts.indirect ? '' : 'FREE KICK', penalty: 'PENALTY!' };
     this.hooks.fade(() => {
       ball.pos.copy(spot);
@@ -2006,6 +2033,7 @@ export class Match {
     if (card === 'yellow') {
       p.yellows = (p.yellows || 0) + 1;
       p.ms.yellow++;
+      this.events.push({ min: Math.max(1, Math.ceil(this.minute)), type: p.yellows >= 2 ? 'red2' : 'yellow', team: key, name: p.name });
       this.stats[key].yellows++;
       if (p.yellows < 2) {
         this.hooks.banner('YELLOW CARD', p.name, 2200, 'card-yellow');
@@ -2017,6 +2045,7 @@ export class Match {
     if (p.isGK) { this.hooks.banner('YELLOW CARD', p.name, 2200, 'card-yellow'); return; } // keepers stay on (no sub keeper)
     this.stats[key].reds++;
     p.ms.red++;
+    if (!(p.yellows >= 2)) this.events.push({ min: Math.max(1, Math.ceil(this.minute)), type: 'red', team: key, name: p.name });
     this.hooks.banner('RED CARD', `${p.name}${p.yellows >= 2 ? ' · second yellow' : ''} — off!`, 2800, 'card-red');
     this.say('red', { n: p.name }, 3);
     this.sendOff(p);
@@ -2767,7 +2796,7 @@ export class Match {
     if (!sv.willSave || ball.owner) return;
     if (Math.abs(ball.pos.x - gk.pos.x) > 0.9 || Math.abs(ball.pos.z - gk.pos.z) > (gk.action === 'dive' ? 1.6 : 1.0) || ball.pos.y > 2.8) return;
     gk.save = null;
-    if (!this.inShootout) gk.ms.saves++;
+    if (!this.inShootout) { gk.ms.saves++; this.stats[gk.team.key].saves++; }
     this.lastTouch = gk;
     this.kickId++;
     this.lastKick = { kind: 'save', team: gk.team, id: this.kickId, by: gk };
@@ -2839,7 +2868,7 @@ export class Match {
   }
   // everyone who played (sent-off players too), for ratings and the player of the match
   matchPlayers() {
-    return [...this.players, ...this.sentOff].map(p => ({ name: p.name, role: p.role, team: p.team.key, num: p.num, data: p.data, ms: p.ms }));
+    return [...this.players, ...this.sentOff].map(p => ({ name: p.name, role: p.role, team: p.team.key, num: p.num, data: p.data, ms: p.ms, off: this.sentOff.includes(p) }));
   }
 
   // pick the celebration while he's still running to the fans
@@ -2935,6 +2964,12 @@ export class Match {
       }
       p.pos.x += p.vel.x * dt;
       p.pos.z += p.vel.z * dt;
+      if (this.phase === 'play' && !this.drill) {
+        const v = Math.hypot(p.vel.x, p.vel.z), st = this.stats[p.team.key];
+        p.ms.dist += v * dt; st.dist += v * dt;
+        if (v > p.ms.topSpd) p.ms.topSpd = v;
+        if (v > st.topSpd) st.topSpd = v;
+      }
       p.pos.x = clamp(p.pos.x, -HL - 3, HL + 3);
       p.pos.z = clamp(p.pos.z, -HW - 3, HW + 3);
 
