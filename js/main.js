@@ -12,12 +12,14 @@ import { startCloud } from './cloud.js';
 import { chooseKits, PATTERNS, KIT_SLOTS } from './kits.js';
 import { CELEBS } from './celebrations.js';
 import { rating, playerOfMatch, summary } from './ratings.js';
+import { DRILLS, DRILL, isBetter, fmtScore } from './drills.js';
+import { DrillRun } from './drill-run.js';
 import { card, clubCard, avatar, cardView, rowsFor } from './cards.js';
 import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 28; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 29; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 // cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
 const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
@@ -310,6 +312,7 @@ $('boot').addEventListener('pointerup', () => {
 
 function goMenu() {
   state = 'menu';
+  ui.hud.classList.remove('drilling');
   commentary.stop();
   ui.fade.classList.add('on');
   setTimeout(() => {
@@ -623,6 +626,52 @@ $('kit-reset').addEventListener('click', () => { SQ.resetKit(kitSlot); kitLoad(k
 $('kits-btn').addEventListener('click', () => { kitLoad('home'); openModal('kit-editor'); });
 
 $('play-btn').addEventListener('click', () => { if (match && state === 'menu') startMatchmaking(); });
+
+// ---------------------------------------------------------------- skill games
+function renderDrills() {
+  $('drill-list').innerHTML = DRILLS.map(d => `<button class="drill" data-drill="${d.key}"><svg class="ico"><use href="#${d.icon}"/></svg><b>${d.name}</b><p>${d.desc}</p><span class="best">BEST ${fmtScore(d.key, SQ.drillBest(d.key))}</span></button>`).join('');
+}
+$('drills-tile').addEventListener('click', () => { renderDrills(); openModal('drills'); });
+$('drill-list').addEventListener('click', e => { const b = e.target.closest('[data-drill]'); if (b) startDrill(b.dataset.drill); });
+const drillHooks = {
+  event: t => hooks.event(t),
+  drillHud({ title, score, info }) { $('dh-title').textContent = title; $('dh-score').textContent = score; $('dh-info').textContent = info; },
+  drillEnd({ kind, score, text }) {
+    const best = SQ.drillBest(kind), isNew = SQ.saveDrill(kind, score, (a, b) => isBetter(kind, a, b));
+    setTimeout(() => {
+      if (!match || !match.drill || match.drill.kind !== kind) return;
+      state = 'result';
+      $('dr-name').textContent = DRILL[kind].name;
+      $('dr-score').textContent = text;
+      $('dr-best').textContent = isNew ? (best == null ? 'First score set!' : `New best! (was ${fmtScore(kind, best)})`) : `Best: ${fmtScore(kind, SQ.drillBest(kind))}`;
+      $('dr-best').classList.toggle('new', isNew);
+      ui.controls.classList.add('hidden');
+      openModal('drill-result');
+      if (isNew) sound.cheer();
+    }, 1200);
+  },
+};
+async function startDrill(kind) {
+  closeModals();
+  sound.init(); commentary.unlock(); commentary.stop();
+  requestFullscreen(); requestWakeLock();
+  ui.fade.classList.add('on');
+  await wait(260);
+  applyGraphics();
+  newMatch();
+  new DrillRun(match, kind, drillHooks);
+  input.reset();
+  state = 'game';
+  showScreen(null);
+  ui.hud.classList.remove('hidden');
+  ui.hud.classList.add('drilling');
+  ui.controls.classList.remove('hidden');
+  camSnap = true;
+  ui.fade.classList.remove('on');
+}
+$('dr-again').addEventListener('click', () => { if (match && match.drill) startDrill(match.drill.kind); });
+$('dr-list').addEventListener('click', () => { closeModals(); goMenu(); setTimeout(() => { renderDrills(); openModal('drills'); }, 300); });
+$('dr-menu').addEventListener('click', () => { closeModals(); goMenu(); });
 $('menu-settings').addEventListener('click', () => openSettings());
 $('menu-controls').addEventListener('click', () => openModal('help'));
 $('fs-btn').addEventListener('click', () => {
@@ -849,7 +898,7 @@ $('pause-btn').addEventListener('click', pause);
 $('resume-btn').addEventListener('click', resume);
 $('pause-settings').addEventListener('click', () => openSettings());
 $('pause-controls').addEventListener('click', () => openModal('help'));
-$('restart-btn').addEventListener('click', () => { closeModals(); startPrematch(); });
+$('restart-btn').addEventListener('click', () => { closeModals(); if (match && match.drill) startDrill(match.drill.kind); else startPrematch(); });
 
 // ---------------------------------------------------------------- button layout editor
 // Positions are button centres in % of the screen, saved on the device.
@@ -959,9 +1008,9 @@ function applyAudio() { sound.setVolume(settings.volume / 100, settings.crowd / 
 for (const k in DEFAULTS) applySetting(k);
 
 function openModal(id) { $(id).classList.remove('hidden'); }
-function closeModals() { for (const id of ['settings', 'help', 'editor', 'kit-editor']) $(id).classList.add('hidden'); }
+function closeModals() { for (const id of ['settings', 'help', 'editor', 'kit-editor', 'drills', 'drill-result']) $(id).classList.add('hidden'); }
 document.querySelectorAll('.modal').forEach(m => {
-  m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-close]')) { m.classList.add('hidden'); if (state === 'paused') buildCamStrip(); } });
+  m.addEventListener('click', e => { if (m.id === 'drill-result') return; if (e.target === m || e.target.closest('[data-close]')) { m.classList.add('hidden'); if (state === 'paused') buildCamStrip(); } });
 });
 
 function openSettings(tab) {
@@ -1305,7 +1354,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 // debug handle for automated testing
 window.__sb27 = {
   get match() { return match; }, get state() { return state; }, input, camera, renderer, settings,
-  get stadium() { return stadium; }, skipIntro() { introT = 99; }, startGame: () => startPrematch(), setSetting,
+  get stadium() { return stadium; }, skipIntro() { introT = 99; }, startGame: () => startPrematch(), startDrill: k => startDrill(k), setSetting,
   skipBoot() { if (state === 'title') { sound.init(); goMenu(); } },
   showLineups() { renderLineups(); showScreen('prematch'); $('prematch').classList.add('ready'); },
 };

@@ -183,7 +183,7 @@ export class Match {
   }
 
   dispose() {
-    for (const p of [...this.players, ...this.sentOff]) {
+    for (const p of [...this.players, ...this.sentOff, ...(this.benched || [])]) {
       this.scene.remove(p.model.root);
       disposePlayerModel(p.model);
     }
@@ -330,6 +330,7 @@ export class Match {
 
     this.movePlayers(dt);
     this.updateBall(dt);
+    if (this.drill) this.drill.update(dt);
     if (this.phase === 'play') {
       this.updateAdvantage(dt);
       this.ballInteractions(dt);
@@ -487,6 +488,7 @@ export class Match {
   }
 
   updateClock(dt) {
+    if (this.drill) return; // skill games keep their own clock
     this.clock += dt;
     if (this.clock < this.halfLen) return;
     const ball = this.ball;
@@ -1743,6 +1745,7 @@ export class Match {
   // ---------------------------------------------------------------- rules
   checkGoalAndOut() {
     if (this.ball.held) return;
+    if (this.drill && !this.drill.live()) return;
     const b = this.ball.pos;
     for (const s of [1, -1]) {
       if (s * b.x > HL + BALL_R) {
@@ -1755,6 +1758,7 @@ export class Match {
           this.hooks.event('SO CLOSE!');
           this.say('miss', {}, 2);
         }
+        if (this.drill) { this.drill.onOut(); return; }
         if (lt === defenders) {
           this.startRestart('corner', attackers, new V3(s * (HL - 0.4), BALL_R, Math.sign(b.z || 1) * (HW - 0.4)));
         } else {
@@ -1764,12 +1768,14 @@ export class Match {
       }
     }
     if (Math.abs(b.z) > HW + BALL_R) {
+      if (this.drill) { this.drill.onOut(); return; }
       const lt = this.lastTouch ? this.lastTouch.team : this.home;
       this.startRestart('throw', lt.opp, new V3(clamp(b.x, -HL + 1, HL - 1), BALL_R, Math.sign(b.z) * (HW + 0.3)));
     }
   }
 
   goalScored(team) {
+    if (this.drill) { this.drill.onGoal(); return; }
     this.goalTime = this.time;
     team.score++;
     this.phase = 'goal';
@@ -1997,6 +2003,18 @@ export class Match {
     this.hooks.banner('RED CARD', `${p.name}${p.yellows >= 2 ? ' · second yellow' : ''} — off!`, 2800, 'card-red');
     this.say('red', { n: p.name }, 3);
     this.sendOff(p);
+  }
+
+  // a skill game: take a player out of the scene entirely
+  bench(p) {
+    const t = p.team;
+    t.players.splice(t.players.indexOf(p), 1);
+    this.players.splice(this.players.indexOf(p), 1);
+    (this.benched || (this.benched = [])).push(p);
+    p.model.root.visible = false;
+    if (this.ball.owner === p) this.ball.owner = null;
+    if (this.blobs) this.blobs.count = this.players.length;
+    this.recBuf = null;
   }
 
   sendOff(p) {
@@ -2598,7 +2616,7 @@ export class Match {
       gk.holdT += dt;
       gk.desired.set(0, 0, 0);
       gk.lockFacing = team.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
-      if (this.phase === 'play' && gk.holdT > (ball.held ? 1.4 : 0.6) && !gk.pending) this.gkDistribute(gk);
+      if (this.phase === 'play' && !this.drill && gk.holdT > (ball.held ? 1.4 : 0.6) && !gk.pending) this.gkDistribute(gk);
       return;
     }
     if (this.phase === 'restart') {

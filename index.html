@@ -42,6 +42,9 @@
     <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v4a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v4M8 21h8M9 17h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-gift" viewBox="0 0 24 24"><path d="M4 11h16v10H4zM3 7h18v4H3zM12 7v14M12 7c-1-3-5-4-5-1.5S10 7 12 7zM12 7c1-3 5-4 5-1.5S14 7 12 7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-cone" viewBox="0 0 24 24"><path d="M10.2 3h3.6l5.4 15H4.8z" fill="currentColor"/><path d="M8.4 9h7.2M6.9 13.5h10.2" stroke="#fff" stroke-width="1.6" opacity=".85"/><rect x="2.5" y="18" width="19" height="3" rx="1" fill="currentColor"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V3" stroke="currentColor" stroke-width="2"/><path d="M6 4h12l-3 4.5 3 4.5H6z" fill="currentColor"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.5l2.9 6 6.6.8-4.9 4.6 1.3 6.6L12 17.3 6.1 20.5l1.3-6.6L2.5 9.3l6.6-.8z" fill="currentColor"/></symbol>
     <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   </svg>
@@ -75,7 +78,7 @@
         <div class="load-tip" id="load-tip"></div>
         <div class="tap-start" id="tap-start">TAP ANYWHERE TO START</div>
       </div>
-      <div class="title-ver"><span class="build-no">Build 28</span> · Ontronop Games</div>
+      <div class="title-ver"><span class="build-no">Build 29</span> · Ontronop Games</div>
     </div>
   </div>
 
@@ -123,10 +126,16 @@
           <div class="q-row" data-quick="difficulty"><label>Difficulty</label><div class="seg"></div></div>
           <div class="q-row" data-quick="minutes"><label>Match length</label><div class="seg"></div></div>
         </div>
-        <button class="tile tile-small" id="menu-controls">
-          <svg class="ico"><use href="#i-pad"/></svg>
-          <div><b>CONTROLS</b><small>Gestures, passes &amp; skills</small></div>
-        </button>
+        <div class="hub-pair hub-modes">
+          <button class="tile tile-small tile-mode" id="drills-tile">
+            <svg class="ico"><use href="#i-cone"/></svg>
+            <div><b>SKILL GAMES</b><small>Shooting, free kicks, pens, cones</small></div>
+          </button>
+          <button class="tile tile-small" id="menu-controls">
+            <svg class="ico"><use href="#i-pad"/></svg>
+            <div><b>CONTROLS</b><small>Gestures &amp; skills</small></div>
+          </button>
+        </div>
       </div>
     </main>
 
@@ -200,6 +209,7 @@
 
   <!-- ============ HUD ============ -->
   <div id="hud" class="hidden">
+    <div id="drill-hud"><small id="dh-title"></small><b id="dh-score">0</b><span id="dh-info"></span></div>
     <div id="scorebar">
       <div class="sb-team sb-home"><i></i>ZFC</div>
       <div class="sb-score"><span id="sc-h">0</span><b></b><span id="sc-a">0</span></div>
@@ -260,7 +270,7 @@
   <!-- ============ SETTINGS ============ -->
   <div id="settings" class="modal hidden">
     <div class="modal-card">
-      <div class="modal-head"><h2>SETTINGS <small class="build-no">Build 28</small> <small class="cloud-st"></small></h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
+      <div class="modal-head"><h2>SETTINGS <small class="build-no">Build 29</small> <small class="cloud-st"></small></h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
       <div class="set-body">
         <nav class="set-tabs" id="set-tabs"></nav>
         <div class="set-pane" id="set-pane"></div>
@@ -294,6 +304,23 @@
         </div>
         <div class="ed-form" id="kit-form"></div>
       </div>
+    </div>
+  </div>
+
+  <div id="drills" class="modal hidden">
+    <div class="modal-card drills-card">
+      <div class="modal-head"><h2>SKILL GAMES</h2><button class="icon-btn close" data-close aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button></div>
+      <div class="drill-list" id="drill-list"></div>
+    </div>
+  </div>
+
+  <div id="drill-result" class="modal hidden">
+    <div class="modal-card drill-res-card">
+      <div class="rc-tag" id="dr-tag">SKILL GAME</div>
+      <h2 id="dr-name"></h2>
+      <div class="dr-score" id="dr-score"></div>
+      <div class="dr-best" id="dr-best"></div>
+      <div class="row"><button class="mbtn primary" id="dr-again">Go again</button><button class="mbtn" id="dr-list">Skill games</button><button class="mbtn" id="dr-menu">Menu</button></div>
     </div>
   </div>
 

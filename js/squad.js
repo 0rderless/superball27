@@ -88,6 +88,7 @@ export function profile() {
   if (!prof || prof.v !== 1) prof = fresh();
   prof.kits = { ...JSON.parse(JSON.stringify(DEFAULT_KITS)), ...(prof.kits || {}) };
   prof.kitChoice = prof.kitChoice || 'auto';
+  prof.drills = prof.drills || {};
   prof.custom = prof.custom || {};
   prof.edits = prof.edits || {};
   applyEditor(prof);
@@ -301,3 +302,13 @@ export const kits = () => profile().kits;
 export function saveKit(slot, kit) { profile().kits[slot] = { ...profile().kits[slot], ...kit }; save(); }
 export function setKitChoice(c) { profile().kitChoice = c; save(); }
 export function resetKit(slot) { profile().kits[slot] = JSON.parse(JSON.stringify(DEFAULT_KITS[slot])); save(); }
+
+// ---------------------------------------------------------------- skill games: best scores
+export const drillBest = kind => (profile().drills[kind] ?? null);
+// returns true for a new best
+export function saveDrill(kind, score, better) {
+  const b = drillBest(kind);
+  if (b != null && !better(score, b)) return false;
+  profile().drills[kind] = score; save();
+  return true;
+}
