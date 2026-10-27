@@ -23,7 +23,7 @@ import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 33; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 34; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 // cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
 const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
@@ -41,7 +41,7 @@ const weakDevice = (navigator.hardwareConcurrency || 4) <= 4 && /Android/i.test(
 const legacyAssist = store.get('assist', 'on') !== 'off';
 const DEFAULTS = {
   difficulty: 'pro', minutes: 6, camera: 'broadcast', camZoom: 100, graphics: weakDevice ? 'low' : 'high',
-  passAssist: legacyAssist, autoSwitch: legacyAssist, autoSprint: true, defAssist: true, dribAssist: true, offside: true, celebration: 'random',
+  passAssist: legacyAssist, autoSwitch: legacyAssist, autoSprint: true, defAssist: true, dribAssist: true, offside: true, celebration: 'random', stayOnside: false, tacAttack: 50, tacLine: 50, tacPress: 50, tacWidth: 50,
   volume: 90, crowd: 100, sound: true, commentary: true,
   radar: true, fps: false, btnSize: 1, vibration: true, joyFixed: false,
 };
@@ -1146,6 +1146,11 @@ const SCHEMA = [
   { tab: 'Gameplay', key: 'dribAssist', label: 'Dribble assist', desc: 'Closer ball control and quicker turns for your players', type: 'toggle' },
   { tab: 'Gameplay', key: 'celebration', label: 'Celebration', desc: 'What your scorer does (or tap one right after you score)', type: 'seg', options: [['random', 'Random'], ...CELEBS.map(c => [c.key, c.name])] },
   { tab: 'Gameplay', key: 'defAssist', label: 'Defence assist', desc: 'Hold SPRINT (no stick) to press and contain the man on the ball', type: 'toggle' },
+  { tab: 'Tactics', key: 'tacAttack', label: 'Attacking', desc: 'Low: players stay back. High: more bodies forward and more runs in behind', type: 'range', min: 0, max: 100, step: 5, unit: '' },
+  { tab: 'Tactics', key: 'tacLine', label: 'Defensive line', desc: 'Low: sit deep near your box. High: push the back line up the pitch', type: 'range', min: 0, max: 100, step: 5, unit: '' },
+  { tab: 'Tactics', key: 'tacPress', label: 'Pressing', desc: 'High: the nearest players close the ball down and win it back by themselves', type: 'range', min: 0, max: 100, step: 5, unit: '' },
+  { tab: 'Tactics', key: 'tacWidth', label: 'Width', desc: 'Low: narrow and compact. High: wide, using the wings', type: 'range', min: 0, max: 100, step: 5, unit: '' },
+  { tab: 'Tactics', key: 'stayOnside', label: 'Stay onside', desc: 'Your team-mates move freely but stop at the offside line, so you can\'t pass to an offside man', type: 'toggle' },
   { tab: 'Camera', key: 'camera', type: 'cams' },
   { tab: 'Camera', key: 'camZoom', label: 'Camera distance', desc: 'Closer or further than the preset', type: 'range', min: 80, max: 125, step: 5, unit: '%' },
   { tab: 'Audio', key: 'volume', label: 'Master volume', type: 'range', min: 0, max: 100, step: 5, unit: '%' },

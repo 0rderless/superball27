@@ -10,6 +10,7 @@ import { Shootout } from './shootout.js';
 import { xg as shotXg } from './facts.js';
 
 const V3 = THREE.Vector3;
+const NEUTRAL_TACTICS = { att: 0.5, line: 0.5, press: 0.5, width: 0.5 };
 const { HL, HW, GW, GH, GD } = F;
 const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -2374,17 +2375,25 @@ export class Match {
     return { p: best, t: bt };
   }
 
+  // your match tactics (0..1, 0.5 = balanced); the AI sides play balanced
+  tactics(team) {
+    if (!team.isUser) return NEUTRAL_TACTICS;
+    const g = (k, d = 50) => clamp((this.settings[k] ?? d) / 100, 0, 1);
+    return { att: g('tacAttack'), line: g('tacLine'), press: g('tacPress'), width: g('tacWidth') };
+  }
+
   formationTarget(p, attacking, aB, cB, out) {
-    const team = p.team, s = p.slot;
+    const team = p.team, s = p.slot, T = this.tactics(team);
     let a = s.a + (aB - 0.5) * 0.62 + (attacking ? 0.07 : -0.05);
+    if (attacking) a += (T.att - 0.5) * (DEFENDERS.has(p.role) ? 0.08 : 0.14);
     if (attacking) {
-      if (DEFENDERS.has(p.role)) a = clamp(a, 0.06, p.role.endsWith('WB') ? 0.72 : 0.6);
+      if (DEFENDERS.has(p.role)) a = clamp(a, 0.06, (p.role.endsWith('WB') ? 0.72 : 0.6) + (T.att - 0.5) * 0.2);
       else if (FORWARDS.has(p.role)) a = clamp(a, 0.45, 0.92);
       else a = clamp(a, 0.15, 0.8);
     } else {
       // out of possession: one back line that drops with the ball, a midfield screen in front of it
       // (outside the box), forwards ready to counter — no camping in the six-yard box
-      const line = clamp(aB - 0.13, 0.075, 0.42);
+      const line = clamp(aB - 0.13 + (T.line - 0.5) * 0.16, 0.075, 0.42 + (T.line - 0.5) * 0.16);
       if (DEFENDERS.has(p.role)) a = line + (s.a - 0.19) * 0.35;
       else if (FORWARDS.has(p.role)) a = clamp(a, 0.38, 0.92);
       else a = Math.max(line + 0.11 + (s.a - 0.38) * 0.45, p.role === 'DM' ? 0.135 : 0.17);
@@ -2395,7 +2404,7 @@ export class Match {
       for (const o of team.opp.players) if (!o.isGK) line = Math.max(line, team.along(o.pos));
       a = Math.min(a, Math.max(line, aB) + 0.005);
     }
-    let c = s.c * (attacking ? 1.05 : 0.72) + cB * (attacking ? 0.22 : 0.35);
+    let c = (s.c * (attacking ? 1.05 : 0.72) + cB * (attacking ? 0.22 : 0.35)) * (attacking ? 0.75 + 0.5 * T.width : 0.85 + 0.3 * T.width);
     c = clamp(c, -0.93, 0.93);
     return team.world(a, c, out);
   }
@@ -2415,6 +2424,13 @@ export class Match {
       chaser = null;
       let bd = 1e9;
       for (const p of team.players) { if (p.isGK) continue; const d = hdist(p.pos, g.to.pos); if (d < bd) { bd = d; marker = p; } }
+    }
+    // stay onside (your side, Settings > Tactics): nobody runs beyond the second-last defender
+    // unless the ball is already past it; they move freely up to it
+    team._onsideLim = null;
+    if (team.isUser && this.settings.stayOnside && this.settings.offside !== false) {
+      const line = secondLastX(team.opp.players.map(q => q.pos.x), team.dir) * team.dir;
+      team._onsideLim = Math.max(0, Math.max(line, ball.pos.x * team.dir) - 1.0); // a metre short, so braking never carries him past
     }
     let presser = null, cover = null;
     if (owner && owner.team !== team && this.phase === 'play' && !ball.held) {
@@ -2468,7 +2484,8 @@ export class Match {
       if (p === presser) {
         const og = new V3(team.goalX, 0, 0);
         const toGoal = og.sub(owner.pos).setY(0).normalize();
-        const userTeamPassive = team.isUser && !team.callPress;
+        const TP = this.tactics(team).press;
+        const userTeamPassive = team.isUser && !team.callPress && TP < 0.75; // high pressing: he goes to the ball by himself
         const d = hdist(p.pos, owner.pos);
         // AI: contain first (stand off ~1.6m), then step in and stand in his path. Good defenders
         // (harder levels) stay patient; weaker ones rush in and get turned. A carrier who isn't
@@ -2490,7 +2507,7 @@ export class Match {
           p.jockey = true;
         }
         if (!team.isUser) this.aiTackle(p, owner, d, dt);
-        if (team.isUser && d < 1.7 && p.tackleCD <= 0 && Math.random() < dt * (team.callPress ? 1.5 : 0.55)) this.tackle(p, false);
+        if (team.isUser && d < 1.7 && p.tackleCD <= 0 && Math.random() < dt * (team.callPress ? 1.5 : 0.55) * (0.5 + TP)) this.tackle(p, false);
         continue;
       }
       if (p === cover) {
@@ -2499,7 +2516,8 @@ export class Match {
         const L = toGoal.length();
         toGoal.normalize();
         const danger = team.inOwnBox(owner.pos, 8);
-        tgt.copy(owner.pos).addScaledVector(owner.vel, 0.4).addScaledVector(toGoal, danger ? 3.2 : Math.min(7, L * 0.35));
+        const TPc = this.tactics(team).press;
+        tgt.copy(owner.pos).addScaledVector(owner.vel, 0.4).addScaledVector(toGoal, (danger ? 3.2 : Math.min(7, L * 0.35)) * (1.4 - 0.8 * TPc));
         p.goToAuto(tgt, danger);
         const dc = hdist(p.pos, owner.pos);
         if (!team.isUser) this.aiTackle(p, owner, dc, dt);
@@ -2508,11 +2526,12 @@ export class Match {
       this.formationTarget(p, attacking, aB, cB, tgt);
       if (attacking) {
         // runs in behind
-        if (FORWARDS.has(p.role) || (ATT_MIDS.has(p.role) && Math.random() < 0.3) || ((p.role === 'LWB' || p.role === 'RWB') && Math.random() < 0.15)) {
+        const TA = this.tactics(team).att;
+        if (FORWARDS.has(p.role) || (ATT_MIDS.has(p.role) && Math.random() < 0.3 * (0.4 + 1.2 * TA)) || ((p.role === 'LWB' || p.role === 'RWB') && Math.random() < 0.15 * (0.4 + 1.2 * TA))) {
           if (p.runT > 0) {
             p.runT -= dt;
             tgt.copy(p.runTarget);
-          } else if (owner && owner.team === team && aB > 0.35 && Math.random() < dt * 0.22) {
+          } else if (owner && owner.team === team && aB > 0.35 && Math.random() < dt * 0.22 * (0.3 + 1.4 * TA)) {
             p.runT = rand(1.8, 3);
             p.runTarget = new V3(clamp(p.pos.x + team.dir * rand(12, 20), -HL + 4, HL - 4), 0, clamp(p.pos.z * 0.6 + gauss() * 5, -HW + 3, HW - 3));
           }
@@ -2555,6 +2574,11 @@ export class Match {
       }
       tgt.x = clamp(tgt.x, -HL + 1, HL - 1);
       tgt.z = clamp(tgt.z, -HW + 1, HW - 1);
+      if (attacking && team._onsideLim != null && p !== team.controlled) {
+        // stop short of the line, allowing for the run-up he needs to pull up
+        const v = Math.max(0, p.vel.x * team.dir), lim = team._onsideLim - v * v / 28;
+        if (tgt.x * team.dir > lim) tgt.x = lim * team.dir;
+      }
       p.goToAuto(tgt);
     }
   }
