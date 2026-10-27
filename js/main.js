@@ -23,7 +23,7 @@ import { SKINS, HAIRS } from './model.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const BUILD = 32; // shown on the title screen and in settings, so you can tell which version is running
+const BUILD = 33; // shown on the title screen and in settings, so you can tell which version is running
 document.querySelectorAll('.build-no').forEach(e => { e.textContent = 'Build ' + BUILD; });
 // cloud save (Firebase): keeps the squad, editor players, kits and settings across phones and links
 const CLOUD_TEXT = { syncing: '· Cloud: saving…', synced: '· Cloud: saved', offline: '· Cloud: offline (saved on this phone)', blocked: '· Cloud: blocked by database rules', off: '' };
@@ -1136,13 +1136,14 @@ $('menu-btn').addEventListener('click', () => goMenu());
 
 // ---------------------------------------------------------------- settings panel (built from a schema)
 const SCHEMA = [
+  { tab: 'Gameplay', key: 'formation', label: 'Formation', desc: 'Your shape — changes straight away, even mid-match', type: 'formation' },
+  { tab: 'Gameplay', key: 'offside', label: 'Offside', desc: 'On: runners beyond the last defender are flagged. Off: no offside at all', type: 'toggle' },
   { tab: 'Gameplay', key: 'difficulty', label: 'Difficulty', type: 'seg', options: DIFF_KEYS.map(k => [k, DIFFICULTY[k].label]) },
   { tab: 'Gameplay', key: 'minutes', label: 'Match length', desc: 'Applies to the next match', type: 'seg', options: [[4, '4 min'], [6, '6 min'], [10, '10 min']] },
   { tab: 'Gameplay', key: 'passAssist', label: 'Pass assist', desc: 'Passes go to who you aim at and follow him', type: 'toggle' },
   { tab: 'Gameplay', key: 'autoSwitch', label: 'Auto switch', desc: 'Control the closest defender automatically', type: 'toggle' },
   { tab: 'Gameplay', key: 'autoSprint', label: 'Auto sprint', desc: 'Stick at the edge = quicker run. Hold SPRINT for top speed', type: 'toggle' },
   { tab: 'Gameplay', key: 'dribAssist', label: 'Dribble assist', desc: 'Closer ball control and quicker turns for your players', type: 'toggle' },
-  { tab: 'Gameplay', key: 'offside', label: 'Offside', desc: 'The linesman flags runners caught beyond the last defender', type: 'toggle' },
   { tab: 'Gameplay', key: 'celebration', label: 'Celebration', desc: 'What your scorer does (or tap one right after you score)', type: 'seg', options: [['random', 'Random'], ...CELEBS.map(c => [c.key, c.name])] },
   { tab: 'Gameplay', key: 'defAssist', label: 'Defence assist', desc: 'Hold SPRINT (no stick) to press and contain the man on the ball', type: 'toggle' },
   { tab: 'Camera', key: 'camera', type: 'cams' },
@@ -1230,6 +1231,18 @@ function renderSettings() {
       t.setAttribute('aria-label', s.label);
       t.addEventListener('click', () => { setSetting(s.key, !settings[s.key]); t.classList.toggle('on', settings[s.key]); });
       row.appendChild(t);
+    } else if (s.type === 'formation') {
+      const g = document.createElement('div');
+      g.className = 'seg seg-wrap';
+      seg(g, FORMATION_NAMES.map(f => [f, f]), () => SQ.formationName(), v => {
+        SQ.setFormation(v);
+        TEAMS.home.formation = v;
+        if (match) match.setFormation(match.home, v);
+        if (tab === 'squad') renderSquad();
+        syncMenu();
+        toast(`Formation: ${v}`, 'shirt');
+      });
+      row.appendChild(g);
     } else if (s.type === 'seg') {
       const g = document.createElement('div');
       g.className = 'seg';

@@ -341,6 +341,7 @@ export class Match {
     this.updateBall(dt);
     if (this.drill) this.drill.update(dt);
     if (this.phase === 'play') {
+      this.userClaim(dt);
       this.updateAdvantage(dt);
       this.ballInteractions(dt);
       this.checkGoalAndOut();
@@ -552,6 +553,10 @@ export class Match {
     const sprint = B.sprint.down || (this.settings.autoSprint && mag > 0.93);
     const r = this.restart;
 
+    if (this.phase === 'restart' && r && r.team === team && r.ready && !r.taker.isGK && p !== r.taker) {
+      this.setControlled(r.taker);
+      return;
+    }
     if (this.phase === 'restart' && r) {
       if (r.team === team && r.taker === p) {
         if (mag > 0.2) r.aim.copy(wdir);
@@ -603,7 +608,7 @@ export class Match {
     const aim = mag > 0.2 ? wdir : p.fwd.clone();
     this._userAim = aim;
     const ourFlight = free && this.lastKick.team === team && this.lastKick.kind !== 'shot';
-    const attackCtx = hasBall || nearFree || ourFlight;
+    const attackCtx = hasBall || nearFree || ourFlight || free; // a loose ball is always PASS/SHOOT, never SWITCH
     // remember what a press meant when it started (so a SWITCH press can't turn into a pass)
     if (B.pass.pressed) this._passCtx = attackCtx;
     if (B.through.pressed) this._thruCtx = attackCtx;
@@ -644,7 +649,7 @@ export class Match {
 
     // one-touch: queue a pass/shot while our pass is on its way
     if (p.queued) { p.queued.t -= dt; if (p.queued.t <= 0) p.queued = null; }
-    if (ourFlight && (passFire || thruFire || B.shoot.pressed)) {
+    if ((ourFlight || free) && (passFire || thruFire || B.shoot.pressed)) {
       p.queued = { kind: B.shoot.pressed ? 'shoot' : thruFire && !passFire ? 'through' : 'ground', height: passHeight, t: 1.2, aim: mag > 0.2 ? wdir.clone() : null };
       this.hooks.event(B.shoot.pressed ? 'FIRST-TIME SHOT' : 'ONE-TOUCH');
       return;
@@ -652,10 +657,10 @@ export class Match {
 
     const ourBall = ball.owner && ball.owner.team === team;
     if (!ourBall && !ourFlight) {
-      if (B.pass.pressed) this.switchPlayer(true);
+      if (B.pass.pressed && !free) this.switchPlayer(true);
       const q = team.controlled;
-      if (B.shoot.pressed) this.tackle(q, false);
-      if (B.skill.pressed) this.tackle(q, true);
+      if (B.shoot.pressed && !free) this.tackle(q, false);
+      if (B.skill.pressed && !free) this.tackle(q, true);
       // SPRINT is also pressure: your teammates press with you; 2ND PRESS (through) sends one more
       const pressing = B.sprint.down || B.through.down;
       team.callPress = pressing;
@@ -972,7 +977,8 @@ export class Match {
     const throwIn = k.kind === 'throw';
     ball.owner = null;
     ball.held = false;
-    if (throwIn) ball.pos.set(p.pos.x + p.fwd.x * 0.3, 2.1, p.pos.z + p.fwd.z * 0.3);
+    // from above his head, just inside the line (thrown from outside it, the ball would be out at once)
+    if (throwIn) ball.pos.set(p.pos.x + p.fwd.x * 0.3, 2.1, clamp(p.pos.z + p.fwd.z * 0.3, -HW + 0.4, HW - 0.4));
     else if (p.isGK && k.fromHands) ball.pos.set(p.pos.x + p.fwd.x * 0.6, 0.5, p.pos.z + p.fwd.z * 0.6);
     else { ball.pos.y = Math.max(BALL_R, Math.min(ball.pos.y, 0.4)); }
     const from = ball.pos;
@@ -1939,6 +1945,38 @@ export class Match {
     if (type === 'penalty') this.say('penalty', { n: taker.name }, 3);
   }
 
+  // ---------------------------------------------------------------- your player's ring
+  // Like FC Mobile: run your player into the ball and you take it. A loose ball that comes inside
+  // your ring is yours; an opponent's ball inside it is won off him (most of the time).
+  userClaim(dt) {
+    const team = this.home, q = team.controlled, ball = this.ball;
+    if (!q || q.isGK || q.busy > 0 || q.stun > 0 || q.skill || ball.held || this.drill) return;
+    this._claimCD = (this._claimCD || 0) - dt;
+    const d = hdist(q.pos, ball.pos);
+    if (d > 0.9 || ball.pos.y > 1.2) return;
+    const o = ball.owner;
+    if (!o) {
+      const g = this.guarantee;
+      if (g && g.to.team === team && g.to !== q) return; // our own pass on its way to a team-mate
+      if (q.cool > 0 && this.lastKick.by === q) return;   // he's only just kicked it
+      this.guarantee = null;
+      this.gainBall(q, false);
+      return;
+    }
+    if (o.team === team || this._claimCD > 0 || o.isGK) return;
+    if (o.skill && o.skill.type === 'up') return; // a rainbow flick is over his head
+    this._claimCD = 0.35;
+    const toward = (ball.pos.x - q.pos.x) * q.vel.x + (ball.pos.z - q.pos.z) * q.vel.z > 0 ? 0.12 : 0;
+    const chance = clamp(0.6 + (q.st.def - o.st.dri) * 0.5 + toward - (o.skillT > 0 ? 0.25 : 0), 0.3, 0.92);
+    if (Math.random() < chance) {
+      o.stun = 0.35; o.a.hitT = 0; o.a.hitBig = false;
+      this.gainBall(q, false);
+      q.ms.tackles++; this.stats[team.key].tackles++;
+      this.sound.kick(0.3);
+      this.hooks.event('WON IT!');
+    }
+  }
+
   // ---------------------------------------------------------------- offside
   // when a player plays the ball, note which team-mates are in an offside position
   offsideSnapshot(p) {
@@ -2061,6 +2099,15 @@ export class Match {
     this.restart = null;
     this.sound.whistle(3, true);
     this.hooks.fullTime();
+  }
+
+  // a new shape mid-match: every player takes the slot of the same number in the new formation
+  setFormation(team, name) {
+    if (!FORMATIONS[name]) return;
+    team.formationName = name;
+    team.formation = FORMATIONS[name];
+    team.kickoff = kickoffShape(team.formation);
+    for (const p of [...team.players, ...this.sentOff.filter(q => q.team === team)]) { p.slot = team.formation[p.idx]; p.role = p.slot.role; }
   }
 
   // a skill game: take a player out of the scene entirely
@@ -2191,7 +2238,7 @@ export class Match {
     t.facing = Math.atan2(r.aim.x, r.aim.z);
     t.fwd.set(Math.sin(t.facing), 0, Math.cos(t.facing));
     if ((!r.team.isUser || t.isGK) && r.wait > (r.type === 'kickoff' ? 1.2 : r.shooting ? 2.4 : 1.6)) this.aiTakeRestart();
-    if (r.team.isUser && r.wait > 10) this.takeRestart('ground');
+    if (r.team.isUser && r.wait > 30 && !r.taker.isGK) this.takeRestart('ground'); // only if you've walked away
   }
 
   aiTakeRestart() {
@@ -2239,6 +2286,8 @@ export class Match {
     if (kind === 'setpiece') return;
     const aim = r.aim.clone().normalize();
     if (r.type === 'throw') {
+      const inward = -Math.sign(r.spot.z);
+      if (aim.z * inward < 0.25) { aim.z = 0.25 * inward; aim.normalize(); }
       let m = forced;
       if (!m) {
         let bs = 1e9;
@@ -3225,6 +3274,7 @@ export class Match {
 
   uiMode() {
     const c = this.home.controlled, ball = this.ball;
+    if (!ball.owner && this.phase === 'play') return 'attack'; // loose or in the air: PASS / SHOOT
     if (this.phase === 'restart' && this.restart && this.restart.team === this.home) return 'attack';
     if (ball.owner === c) return 'attack';
     if (!ball.owner && c && hdist(c.pos, ball.pos) < 1.6) return 'attack';

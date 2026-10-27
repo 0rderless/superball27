@@ -919,3 +919,4 @@ em.yc { background: #ffd21f; } em.rc { background: #e3102c; }
 .sd-edit .ico { width: 14px; height: 14px; }
 .ed-hint { font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 6px 9px; border-radius: 8px; background: rgba(69,224,255,.08); }
 .ed-hint b { color: var(--text); }
+.seg.seg-wrap { flex-wrap: wrap; } .seg.seg-wrap button { flex: 1 0 auto; }
